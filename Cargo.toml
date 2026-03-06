@@ -3,7 +3,6 @@ name = "lacuna"
 version = "0.1.1"
 edition = "2024"
 license = "MIT"
-license-file = "LICENSE"
 
 [dependencies]
 axum = ">=0.8"
