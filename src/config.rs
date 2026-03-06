@@ -1,3 +1,4 @@
+pub use crate::provider::compatibility::Compatibility;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
@@ -41,24 +42,6 @@ pub enum Authorization {
     Bearer,
     XApiKey,
     XGoogApiKey,
-}
-
-#[derive(Debug, Deserialize, Serialize, Default, PartialEq)]
-pub struct Compatibility {
-    #[serde(default)]
-    pub openai_chat: bool,
-    #[serde(default)]
-    pub openai_responses: bool,
-    #[serde(default)]
-    pub anthropic_messages: bool,
-    #[serde(default)]
-    pub gemini_generate_content: bool,
-    #[serde(default)]
-    pub bedrock_model_invoke: bool,
-    #[serde(default)]
-    pub google_generate_content: bool,
-    #[serde(default)]
-    pub google_raw_predict: bool,
 }
 
 impl Config {

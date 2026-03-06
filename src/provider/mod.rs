@@ -1,12 +1,19 @@
 mod authenticator;
+pub mod compatibility;
+mod manager;
 
 use crate::config;
 use authenticator::{ProviderAuthenticator, build_authenticator};
+use compatibility::Compatibility;
+
+pub use manager::ProviderManager;
 
 pub struct Provider {
+    pub name: String,
     baseurl: reqwest::Url,
     client: reqwest::Client,
     authenticator: Box<dyn ProviderAuthenticator + Send + Sync>,
+    pub compatibility: Compatibility,
 }
 
 impl Provider {
@@ -14,9 +21,11 @@ impl Provider {
         let baseurl = reqwest::Url::parse(&config.baseurl)?;
         let authenticator = build_authenticator(&config.authorization, &config.apikey);
         Ok(Self {
+            name: config.name.clone(),
             baseurl,
             client: reqwest::Client::new(),
             authenticator,
+            compatibility: config.compatibility.clone(),
         })
     }
 
