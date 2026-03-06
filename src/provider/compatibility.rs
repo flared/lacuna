@@ -53,7 +53,10 @@ mod tests {
 
     #[test]
     fn openai_chat() {
-        let c = Compatibility { openai_chat: true, ..Default::default() };
+        let c = Compatibility {
+            openai_chat: true,
+            ..Default::default()
+        };
         assert!(c.is_compatible("/v1/chat/completions"));
         assert!(c.is_compatible("/v1/chat/completions?stream=true"));
         assert!(!c.is_compatible("/v1/responses"));
@@ -61,7 +64,10 @@ mod tests {
 
     #[test]
     fn openai_responses() {
-        let c = Compatibility { openai_responses: true, ..Default::default() };
+        let c = Compatibility {
+            openai_responses: true,
+            ..Default::default()
+        };
         assert!(c.is_compatible("/v1/responses"));
         assert!(c.is_compatible("/v1/responses/resp_123"));
         assert!(!c.is_compatible("/v1/chat/completions"));
@@ -69,7 +75,10 @@ mod tests {
 
     #[test]
     fn anthropic_messages() {
-        let c = Compatibility { anthropic_messages: true, ..Default::default() };
+        let c = Compatibility {
+            anthropic_messages: true,
+            ..Default::default()
+        };
         assert!(c.is_compatible("/v1/messages"));
         assert!(c.is_compatible("/v1/messages?stream=true"));
         assert!(!c.is_compatible("/v1/chat/completions"));
@@ -77,28 +86,40 @@ mod tests {
 
     #[test]
     fn gemini_generate_content() {
-        let c = Compatibility { gemini_generate_content: true, ..Default::default() };
+        let c = Compatibility {
+            gemini_generate_content: true,
+            ..Default::default()
+        };
         assert!(c.is_compatible("/v1/models/gemini-2.0-flash:generateContent"));
         assert!(!c.is_compatible("/v1/chat/completions"));
     }
 
     #[test]
     fn bedrock_model_invoke() {
-        let c = Compatibility { bedrock_model_invoke: true, ..Default::default() };
+        let c = Compatibility {
+            bedrock_model_invoke: true,
+            ..Default::default()
+        };
         assert!(c.is_compatible("/model/us.anthropic.claude-sonnet-4-5/invoke"));
         assert!(!c.is_compatible("/v1/chat/completions"));
     }
 
     #[test]
     fn google_generate_content() {
-        let c = Compatibility { google_generate_content: true, ..Default::default() };
+        let c = Compatibility {
+            google_generate_content: true,
+            ..Default::default()
+        };
         assert!(c.is_compatible("/v1/projects/my-proj/locations/us/publishers/google/models/gemini-2.5-pro:generateContent"));
         assert!(!c.is_compatible("/v1/chat/completions"));
     }
 
     #[test]
     fn google_raw_predict() {
-        let c = Compatibility { google_raw_predict: true, ..Default::default() };
+        let c = Compatibility {
+            google_raw_predict: true,
+            ..Default::default()
+        };
         assert!(c.is_compatible(
             "/v1/projects/my-proj/locations/us/publishers/google/models/claude-opus-4-5:rawPredict"
         ));
@@ -115,7 +136,10 @@ mod tests {
 
     #[test]
     fn unrelated_path_matches_nothing() {
-        let c = Compatibility { openai_chat: true, ..Default::default() };
+        let c = Compatibility {
+            openai_chat: true,
+            ..Default::default()
+        };
         assert!(!c.is_compatible("/health"));
         assert!(!c.is_compatible("/v2/something"));
     }
