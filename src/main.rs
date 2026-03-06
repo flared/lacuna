@@ -1,4 +1,5 @@
 mod config;
+mod provider;
 
 use axum::{Router, routing::get};
 use clap::Parser;
