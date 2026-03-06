@@ -1,9 +1,15 @@
 mod config;
 mod provider;
 
+use axum::body::Body;
+use axum::extract::State;
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
 use axum::{Router, routing::get};
 use clap::Parser;
+use provider::ProviderManager;
 use std::path::PathBuf;
+use std::sync::Arc;
 use tokio::net::TcpListener;
 
 #[derive(Parser)]
@@ -17,8 +23,54 @@ async fn health() -> &'static str {
     "ok"
 }
 
-fn app() -> Router {
-    Router::new().route("/health", get(health))
+async fn proxy_handler(
+    State(manager): State<Arc<ProviderManager>>,
+    request: axum::extract::Request,
+) -> Response {
+    let path = request.uri().path().to_owned();
+    let provider = match manager.get_for_path(&path) {
+        Some(p) => p,
+        None => return (StatusCode::NOT_FOUND, "no provider found for path").into_response(),
+    };
+
+    let upstream_req = match provider.build_request(request) {
+        Ok(r) => r,
+        Err(e) => {
+            return (
+                StatusCode::BAD_GATEWAY,
+                format!("failed to build request: {e}"),
+            )
+                .into_response();
+        }
+    };
+
+    let upstream_res = match upstream_req.send().await {
+        Ok(r) => r,
+        Err(e) => {
+            return (
+                StatusCode::BAD_GATEWAY,
+                format!("upstream request failed: {e}"),
+            )
+                .into_response();
+        }
+    };
+
+    let status = upstream_res.status();
+    let headers = upstream_res.headers().clone();
+    let body = Body::from_stream(upstream_res.bytes_stream());
+
+    let mut builder = Response::builder().status(status.as_u16());
+    for (name, value) in headers.iter() {
+        builder = builder.header(name, value);
+    }
+    builder.body(body).unwrap().into_response()
+}
+
+fn app(manager: Arc<ProviderManager>) -> Router {
+    Router::new()
+        .route("/health", get(health))
+        .fallback(proxy_handler)
+        .with_state(manager)
 }
 
 #[tokio::main]
@@ -30,21 +82,35 @@ async fn main() {
     });
     println!("loaded {} provider(s)", config.providers.len());
 
+    let mut manager = ProviderManager::new();
+    for (key, provider_config) in &config.providers {
+        let provider = provider::Provider::from_config(provider_config).unwrap_or_else(|e| {
+            eprintln!("failed to configure provider {key}: {e}");
+            std::process::exit(1);
+        });
+        manager.add(provider);
+    }
+    let manager = Arc::new(manager);
+
     let listener = TcpListener::bind("127.0.0.1:3000").await.unwrap();
     println!("listening on {}", listener.local_addr().unwrap());
-    axum::serve(listener, app()).await.unwrap();
+    axum::serve(listener, app(manager)).await.unwrap();
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use axum::body::Body;
-    use axum::http::{Request, StatusCode};
+    use axum::http::Request;
     use tower::ServiceExt;
+
+    fn empty_manager() -> Arc<ProviderManager> {
+        Arc::new(ProviderManager::new())
+    }
 
     #[tokio::test]
     async fn health_returns_ok() {
-        let response = app()
+        let response = app(empty_manager())
             .oneshot(
                 Request::builder()
                     .uri("/health")
@@ -60,5 +126,92 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(&body[..], b"ok");
+    }
+
+    #[tokio::test]
+    async fn unmatched_path_returns_404() {
+        let response = app(empty_manager())
+            .oneshot(
+                Request::builder()
+                    .uri("/v1/chat/completions")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn proxy_forwards_to_upstream() {
+        // Spin up a mock upstream server.
+        let upstream = Router::new().fallback(|request: axum::extract::Request| async move {
+            let auth = request
+                .headers()
+                .get("authorization")
+                .map(|v| v.to_str().unwrap().to_owned())
+                .unwrap_or_default();
+            let path = request.uri().path().to_owned();
+            let body = axum::body::to_bytes(request.into_body(), usize::MAX)
+                .await
+                .unwrap();
+            let mut headers = axum::http::HeaderMap::new();
+            headers.insert("x-test-header", "hello".parse().unwrap());
+            headers.insert("x-received-auth", auth.parse().unwrap());
+            (
+                StatusCode::OK,
+                headers,
+                format!("echoed {} {}", path, String::from_utf8_lossy(&body)),
+            )
+        });
+        let upstream_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let upstream_addr = upstream_listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(upstream_listener, upstream).await.unwrap();
+        });
+
+        // Configure a provider pointing at the mock upstream.
+        let mut manager = ProviderManager::new();
+        let mut compat = provider::compatibility::Compatibility::default();
+        compat.openai_chat = true;
+        let provider = provider::Provider::from_config(&config::Provider {
+            name: "test".to_owned(),
+            description: String::new(),
+            baseurl: format!("http://{upstream_addr}"),
+            models: vec![],
+            apikey: "sk-test-key".to_owned(),
+            authorization: config::Authorization::Bearer,
+            tailnet: false,
+            compatibility: compat,
+        })
+        .unwrap();
+        manager.add(provider);
+
+        let response = app(Arc::new(manager))
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/chat/completions")
+                    .body(Body::from("test-body"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers().get("x-test-header").unwrap(), "hello");
+        assert_eq!(
+            response.headers().get("x-received-auth").unwrap(),
+            "Bearer sk-test-key"
+        );
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert_eq!(
+            String::from_utf8_lossy(&body),
+            "echoed /v1/chat/completions test-body"
+        );
     }
 }
