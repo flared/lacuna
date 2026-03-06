@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+main() {
+    local current_version
+    current_version=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[0].version')
+
+    if [ $# -eq 0 ]; then
+        echo "Current version is: ${current_version}"
+        exit 1
+    fi
+
+    local new_version="$1"
+
+    cargo set-version "${new_version}"
+
+    git add Cargo.toml Cargo.lock
+
+    git commit -m "Bump version to v${new_version}"
+
+    git push
+
+    echo "Release at https://github.com/Flared/lacuna/releases/new?tag=v${new_version}&target=main&title=v${new_version}"
+}
+
+main "$@"
