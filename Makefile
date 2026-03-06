@@ -1,7 +1,10 @@
-DEFAULT_GOAL := .all
+.DEFAULT_GOAL := build
+
+.PHONY: ci
+ci: build test
 
 .PHONY: .all
-.all: build
+.all: build test
 
 .PHONY: build
 build:
@@ -10,6 +13,10 @@ build:
 .PHONY: docker-build
 docker-build:
 	docker build -t ghcr.io/flared/lacuna .
+
+.PHONY: test
+test:
+	cargo test
 
 .PHONY: clean
 clean:
