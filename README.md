@@ -5,6 +5,12 @@
 Lacuna is an open-source API gateway for AI providers (OpenAI, Anthropic, Bedrock).
 It is meant to be deployed in Tailscale to grant AI API access to all your tailnet members without having to distribute API keys.
 
+## Docker Image
+
+```
+docker pull ghcr.io/flared/lacuna:latest
+```
+
 ## Dev Dependencies
 
 ```
