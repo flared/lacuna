@@ -1,7 +1,7 @@
 mod authenticator;
 
 use crate::config;
-use authenticator::{build_authenticator, ProviderAuthenticator};
+use authenticator::{ProviderAuthenticator, build_authenticator};
 
 pub struct Provider {
     baseurl: reqwest::Url,
