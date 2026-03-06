@@ -21,7 +21,7 @@ main() {
 
     git push
 
-    echo "Release at https://github.com/Flared/lacuna/releases/new?tag=v${new_version}&target=main&title=v${new_version}"
+    echo "After merging, release at https://github.com/Flared/lacuna/releases/new?tag=v${new_version}&target=main&title=v${new_version}"
 }
 
 main "$@"
