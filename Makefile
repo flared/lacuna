@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := build
 
 .PHONY: ci
-ci: build test
+ci: build test format-check
 
 .PHONY: .all
 .all: build test
@@ -17,6 +17,14 @@ docker-build:
 .PHONY: test
 test:
 	cargo test
+
+.PHONY: format
+format:
+	cargo fmt
+
+.PHONY: format-check
+format-check:
+	cargo fmt --check
 
 .PHONY: clean
 clean:
