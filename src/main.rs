@@ -56,7 +56,7 @@ async fn proxy_handler(
         }
     };
 
-    let upstream_res = match upstream_req.send().await {
+    let upstream_res = match provider.send(upstream_req).await {
         Ok(r) => r,
         Err(e) => {
             return (
