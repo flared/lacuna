@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := build
 
 .PHONY: ci
-ci: build test format-check
+ci: build test format-check clippy
 
 .PHONY: .all
 .all: build test
@@ -22,9 +22,17 @@ test:
 format:
 	cargo fmt
 
+.PHONY: fix
+fix:
+	cargo fix --allow-dirty
+
 .PHONY: format-check
 format-check:
 	cargo fmt --check
+
+.PHONY: clippy
+clippy:
+	cargo clippy
 
 .PHONY: clean
 clean:
