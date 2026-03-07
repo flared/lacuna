@@ -58,18 +58,26 @@ docker pull ghcr.io/flared/lacuna:latest
 
 ## Dev Dependencies
 
-```
-cargo install cargo-edit
-```
+- cargo
+- cargo-edit: `cargo install cargo-edit`
+- pnpm
 
 ## Contributing
 
-- `make build`: Build the app.
+**General**
+- `make ci`: Run CI-equivalent locally.
+- `make docker-build`: Build the Docker image.
+- `bin/bump-version`: Bump the version number and allow you to release.
+
+**API Targets**
+- `make build`: Build the API.
 - `make run`: Run the app with the example config.
 - `make test`: Run tests.
 - `make format`: Format the code.
 - `make fix`: Automatically fix lint warnings.
 - `make clippy`: Lint for common errors.
-- `make ci`: Run CI-equivalent locally.
-- `make docker-build`: Build the Docker image.
-- `bin/bump-version`: Bump the version number and allow you to release.
+
+**Frontend Targets**
+- `make frontend-build`: Build the frontend.
+- `make frontend-format`: Format the frontend.
+- `make frontend-run`: Serve the frontend with auto-reload using Vite. You must also have the backend running.

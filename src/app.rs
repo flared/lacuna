@@ -39,11 +39,14 @@ impl AppBuilder {
 
     pub fn build(self) -> Router {
         let manager = self.manager.unwrap_or_default();
-        let assets_path = self.assets_path.unwrap_or_else(|| PathBuf::from("assets"));
+        let assets_path = self
+            .assets_path
+            .unwrap_or_else(|| PathBuf::from("frontend/dist"));
 
         let mut router = Router::new()
             .route("/health", get(handlers::health::health))
             .route("/metrics", get(handlers::metrics::handler))
+            .nest("/api", handlers::api::router())
             .nest("/ui", handlers::ui::router(&assets_path))
             .route("/", get(|| async { Redirect::permanent("/ui") }));
 
