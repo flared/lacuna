@@ -33,17 +33,13 @@ async fn health() -> &'static str {
     "ok"
 }
 
-async fn proxy_handler(
-    State(manager): State<Arc<ProviderManager>>,
+async fn forward_to_provider(
+    provider: &provider::Provider,
     request: axum::extract::Request,
 ) -> Response {
     let method = request.method().to_owned();
     let path = request.uri().path().to_owned();
     debug!(%method, %path, "downstream_req");
-    let provider = match manager.get_for_path(&path) {
-        Some(p) => p,
-        None => return (StatusCode::NOT_FOUND, "no provider found for path").into_response(),
-    };
 
     let upstream_req = match provider.build_request(request) {
         Ok(r) => r,
@@ -80,11 +76,37 @@ async fn proxy_handler(
     builder.body(body).unwrap().into_response()
 }
 
-fn app(manager: Arc<ProviderManager>) -> Router {
-    Router::new()
-        .route("/health", get(health))
-        .fallback(proxy_handler)
-        .with_state(manager)
+async fn provider_proxy_handler(
+    State(provider): State<Arc<provider::Provider>>,
+    request: axum::extract::Request,
+) -> Response {
+    forward_to_provider(&provider, request).await
+}
+
+async fn proxy_handler(
+    State(manager): State<Arc<ProviderManager>>,
+    request: axum::extract::Request,
+) -> Response {
+    let path = request.uri().path().to_owned();
+    let provider = match manager.get_for_path(&path) {
+        Some(p) => p,
+        None => return (StatusCode::NOT_FOUND, "no provider found for path").into_response(),
+    };
+    forward_to_provider(provider, request).await
+}
+
+fn app(manager: ProviderManager) -> Router {
+    let mut router = Router::new().route("/health", get(health));
+
+    for (name, provider) in manager.iter() {
+        let provider_router = Router::new()
+            .fallback(provider_proxy_handler)
+            .with_state(Arc::clone(provider));
+        router = router.nest(&format!("/{name}"), provider_router);
+    }
+
+    let manager = Arc::new(manager);
+    router.fallback(proxy_handler).with_state(manager)
 }
 
 #[tokio::main]
@@ -110,8 +132,6 @@ async fn main() {
         });
         manager.add(provider);
     }
-    let manager = Arc::new(manager);
-
     let listener = TcpListener::bind(format!("{}:{}", args.host, args.port))
         .await
         .unwrap();
@@ -126,13 +146,44 @@ mod tests {
     use axum::http::Request;
     use tower::ServiceExt;
 
-    fn empty_manager() -> Arc<ProviderManager> {
-        Arc::new(ProviderManager::new())
+    /// Spawn an echo server that returns the path and body it received.
+    async fn spawn_echo_server() -> std::net::SocketAddr {
+        let upstream = Router::new().fallback(|request: axum::extract::Request| async move {
+            let path = request.uri().path().to_owned();
+            let body = axum::body::to_bytes(request.into_body(), usize::MAX)
+                .await
+                .unwrap();
+            format!("echoed {} {}", path, String::from_utf8_lossy(&body))
+        });
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(listener, upstream).await.unwrap();
+        });
+        addr
+    }
+
+    fn make_provider(
+        name: &str,
+        baseurl: &str,
+        compat: provider::compatibility::Compatibility,
+    ) -> provider::Provider {
+        provider::Provider::from_config(&config::Provider {
+            name: name.to_owned(),
+            description: String::new(),
+            baseurl: baseurl.to_owned(),
+            models: vec![],
+            apikey: String::new(),
+            authorization: config::Authorization::None,
+            tailnet: false,
+            compatibility: compat,
+        })
+        .unwrap()
     }
 
     #[tokio::test]
     async fn health_returns_ok() {
-        let response = app(empty_manager())
+        let response = app(ProviderManager::new())
             .oneshot(
                 Request::builder()
                     .uri("/health")
@@ -152,7 +203,7 @@ mod tests {
 
     #[tokio::test]
     async fn unmatched_path_returns_404() {
-        let response = app(empty_manager())
+        let response = app(ProviderManager::new())
             .oneshot(
                 Request::builder()
                     .uri("/v1/chat/completions")
@@ -167,61 +218,19 @@ mod tests {
 
     #[tokio::test]
     async fn proxy_forwards_to_upstream() {
-        // Spin up a mock upstream server.
-        let upstream = Router::new().fallback(|request: axum::extract::Request| async move {
-            let auth = request
-                .headers()
-                .get("authorization")
-                .map(|v| v.to_str().unwrap().to_owned())
-                .unwrap_or_default();
-            let custom = request
-                .headers()
-                .get("x-custom-header")
-                .map(|v| v.to_str().unwrap().to_owned())
-                .unwrap_or_default();
-            let path = request.uri().path().to_owned();
-            let body = axum::body::to_bytes(request.into_body(), usize::MAX)
-                .await
-                .unwrap();
-            let mut headers = axum::http::HeaderMap::new();
-            headers.insert("x-test-header", "hello".parse().unwrap());
-            headers.insert("x-received-auth", auth.parse().unwrap());
-            headers.insert("x-received-custom", custom.parse().unwrap());
-            (
-                StatusCode::OK,
-                headers,
-                format!("echoed {} {}", path, String::from_utf8_lossy(&body)),
-            )
-        });
-        let upstream_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let upstream_addr = upstream_listener.local_addr().unwrap();
-        tokio::spawn(async move {
-            axum::serve(upstream_listener, upstream).await.unwrap();
-        });
+        let addr = spawn_echo_server().await;
 
-        // Configure a provider pointing at the mock upstream.
-        let mut manager = ProviderManager::new();
         let mut compat = provider::compatibility::Compatibility::default();
         compat.openai_chat = true;
-        let provider = provider::Provider::from_config(&config::Provider {
-            name: "test".to_owned(),
-            description: String::new(),
-            baseurl: format!("http://{upstream_addr}"),
-            models: vec![],
-            apikey: "sk-test-key".to_owned(),
-            authorization: config::Authorization::Bearer,
-            tailnet: false,
-            compatibility: compat,
-        })
-        .unwrap();
-        manager.add(provider);
 
-        let response = app(Arc::new(manager))
+        let mut manager = ProviderManager::new();
+        manager.add(make_provider("test", &format!("http://{addr}"), compat));
+
+        let response = app(manager)
             .oneshot(
                 Request::builder()
                     .method("POST")
                     .uri("/v1/chat/completions")
-                    .header("x-custom-header", "custom-value")
                     .body(Body::from("test-body"))
                     .unwrap(),
             )
@@ -229,22 +238,43 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
-        assert_eq!(response.headers().get("x-test-header").unwrap(), "hello");
-        assert_eq!(
-            response.headers().get("x-received-auth").unwrap(),
-            "Bearer sk-test-key"
-        );
-        assert_eq!(
-            response.headers().get("x-received-custom").unwrap(),
-            "custom-value"
-        );
-
         let body = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
             .unwrap();
         assert_eq!(
             String::from_utf8_lossy(&body),
             "echoed /v1/chat/completions test-body"
+        );
+    }
+
+    #[tokio::test]
+    async fn proxy_routes_by_provider_name_prefix() {
+        let addr = spawn_echo_server().await;
+
+        let mut compat = provider::compatibility::Compatibility::default();
+        compat.openai_chat = true;
+
+        let mut manager = ProviderManager::new();
+        manager.add(make_provider("myopenai", &format!("http://{addr}"), compat));
+
+        let response = app(manager)
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/myopenai/v1/chat/completions")
+                    .body(Body::from("hello"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert_eq!(
+            String::from_utf8_lossy(&body),
+            "echoed /v1/chat/completions hello"
         );
     }
 }

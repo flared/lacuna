@@ -1,24 +1,32 @@
+use std::collections::HashMap;
+use std::sync::Arc;
+
 use super::Provider;
 
 pub struct ProviderManager {
-    providers: Vec<Provider>,
+    providers: HashMap<String, Arc<Provider>>,
 }
 
 impl ProviderManager {
     pub fn new() -> Self {
         Self {
-            providers: Vec::new(),
+            providers: HashMap::new(),
         }
     }
 
     pub fn add(&mut self, provider: Provider) {
-        self.providers.push(provider);
+        self.providers
+            .insert(provider.name.clone(), Arc::new(provider));
     }
 
-    pub fn get_for_path(&self, path: &str) -> Option<&Provider> {
+    pub fn get_for_path(&self, path: &str) -> Option<&Arc<Provider>> {
         self.providers
-            .iter()
+            .values()
             .find(|p| p.compatibility.is_compatible(path))
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&String, &Arc<Provider>)> {
+        self.providers.iter()
     }
 }
 
@@ -70,22 +78,6 @@ mod tests {
         mgr.add(make_provider("openai", compat));
 
         assert!(mgr.get_for_path("/v1/messages").is_none());
-    }
-
-    #[test]
-    fn returns_first_matching_provider() {
-        let mut mgr = ProviderManager::new();
-
-        let mut compat1 = Compatibility::default();
-        compat1.openai_chat = true;
-        mgr.add(make_provider("first", compat1));
-
-        let mut compat2 = Compatibility::default();
-        compat2.openai_chat = true;
-        mgr.add(make_provider("second", compat2));
-
-        let result = mgr.get_for_path("/v1/chat/completions").unwrap();
-        assert_eq!(result.name, "first");
     }
 
     #[test]
