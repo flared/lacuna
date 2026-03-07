@@ -43,6 +43,7 @@ impl AppBuilder {
 
         let mut router = Router::new()
             .route("/health", get(handlers::health::health))
+            .route("/metrics", get(handlers::metrics::handler))
             .nest("/ui", handlers::ui::router(&assets_path))
             .route("/", get(|| async { Redirect::permanent("/ui") }));
 

@@ -53,6 +53,8 @@ fn strip_hop_headers(mut headers: axum::http::HeaderMap) -> axum::http::HeaderMa
 
 pub struct Provider {
     #[allow(dead_code)]
+    pub key: String,
+    #[allow(dead_code)]
     pub name: String,
     pub baseurl: reqwest::Url,
     client: reqwest::Client,
@@ -61,10 +63,11 @@ pub struct Provider {
 }
 
 impl Provider {
-    pub fn from_config(config: &config::Provider) -> Result<Self, anyhow::Error> {
+    pub fn from_config(key: &str, config: &config::Provider) -> Result<Self, anyhow::Error> {
         let baseurl = reqwest::Url::parse(&config.baseurl)?;
         let authenticator = build_authenticator(&config.authorization, &config.apikey);
         Ok(Self {
+            key: key.to_owned(),
             name: config.name.clone(),
             baseurl,
             client: reqwest::Client::new(),
@@ -118,16 +121,19 @@ mod tests {
         authorization: config::Authorization,
         apikey: &str,
     ) -> Provider {
-        Provider::from_config(&config::Provider {
-            name: String::new(),
-            description: String::new(),
-            baseurl: baseurl.to_owned(),
-            models: vec!["model-1".to_owned()],
-            apikey: apikey.to_owned(),
-            authorization,
-            tailnet: false,
-            compatibility: config::Compatibility::default(),
-        })
+        Provider::from_config(
+            "test",
+            &config::Provider {
+                name: String::new(),
+                description: String::new(),
+                baseurl: baseurl.to_owned(),
+                models: vec!["model-1".to_owned()],
+                apikey: apikey.to_owned(),
+                authorization,
+                tailnet: false,
+                compatibility: config::Compatibility::default(),
+            },
+        )
         .expect("test baseurl should be valid")
     }
 

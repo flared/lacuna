@@ -5,6 +5,8 @@ use axum::response::{IntoResponse, Response};
 use std::sync::Arc;
 use tracing::{debug, info};
 
+use crate::auth;
+use crate::metrics;
 use crate::provider::{self, ProviderManager};
 
 async fn forward_to_provider(
@@ -13,6 +15,8 @@ async fn forward_to_provider(
 ) -> Response {
     let method = request.method().to_owned();
     let path = request.uri().path().to_owned();
+    let user = auth::get_caller_identity(&request).unwrap_or_default();
+    metrics::record_request(&provider.key, &user);
     debug!(%method, %path, "downstream_req");
 
     let upstream_req = match provider.build_request(request) {
@@ -71,49 +75,12 @@ pub async fn proxy_handler(
 
 #[cfg(test)]
 mod tests {
-    use axum::Router;
     use axum::body::Body;
     use axum::http::{Request, StatusCode};
-    use tokio::net::TcpListener;
     use tower::ServiceExt;
 
-    use crate::config;
     use crate::provider::{self, ProviderManager};
-
-    /// Spawn an echo server that returns the path and body it received.
-    async fn spawn_echo_server() -> std::net::SocketAddr {
-        let upstream = Router::new().fallback(|request: axum::extract::Request| async move {
-            let path = request.uri().path().to_owned();
-            let body = axum::body::to_bytes(request.into_body(), usize::MAX)
-                .await
-                .unwrap();
-            format!("echoed {} {}", path, String::from_utf8_lossy(&body))
-        });
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        tokio::spawn(async move {
-            axum::serve(listener, upstream).await.unwrap();
-        });
-        addr
-    }
-
-    fn make_provider(
-        name: &str,
-        baseurl: &str,
-        compat: provider::compatibility::Compatibility,
-    ) -> provider::Provider {
-        provider::Provider::from_config(&config::Provider {
-            name: name.to_owned(),
-            description: String::new(),
-            baseurl: baseurl.to_owned(),
-            models: vec![],
-            apikey: String::new(),
-            authorization: config::Authorization::None,
-            tailnet: false,
-            compatibility: compat,
-        })
-        .unwrap()
-    }
+    use crate::test_utils::{make_provider, spawn_echo_server};
 
     #[tokio::test]
     async fn unmatched_path_returns_404() {
@@ -139,10 +106,11 @@ mod tests {
         compat.openai_chat = true;
 
         let mut manager = ProviderManager::new();
-        manager.add(
-            "provider-key".to_owned(),
-            make_provider("provider-name", &format!("http://{addr}"), compat),
-        );
+        manager.add(make_provider(
+            "provider-key",
+            &format!("http://{addr}"),
+            compat,
+        ));
 
         let response = crate::app::AppBuilder::new()
             .manager(manager)
@@ -175,10 +143,7 @@ mod tests {
         compat.openai_chat = true;
 
         let mut manager = ProviderManager::new();
-        manager.add(
-            "myopenai".to_owned(),
-            make_provider("My OpenAI Provider", &format!("http://{addr}"), compat),
-        );
+        manager.add(make_provider("myopenai", &format!("http://{addr}"), compat));
 
         let response = crate::app::AppBuilder::new()
             .manager(manager)
