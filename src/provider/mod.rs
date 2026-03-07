@@ -9,6 +9,7 @@ use compatibility::Compatibility;
 pub use manager::ProviderManager;
 
 pub struct Provider {
+    #[allow(dead_code)]
     pub name: String,
     baseurl: reqwest::Url,
     client: reqwest::Client,
