@@ -22,3 +22,4 @@ anyhow = "1.0.102"
 
 [dev-dependencies]
 tower = { version = ">=0.5", features = ["util"] }
+temp-env = ">=0.3"

@@ -47,8 +47,21 @@ pub enum Authorization {
 impl Config {
     pub fn load(path: &Path) -> Result<Self, anyhow::Error> {
         let contents = std::fs::read_to_string(path)?;
+        let contents = Self::substitute_env_vars(&contents)?;
         let config: Config = json5::from_str(&contents)?;
         Ok(config)
+    }
+
+    fn substitute_env_vars(input: &str) -> Result<String, anyhow::Error> {
+        let re = regex::Regex::new(r"\$\{([^}]+)\}")?;
+        let mut result = input.to_string();
+        for caps in re.captures_iter(input) {
+            let var_name = &caps[1];
+            let value = std::env::var(var_name)
+                .map_err(|_| anyhow::anyhow!("environment variable '{}' is not set", var_name))?;
+            result = result.replace(&caps[0].to_string(), &value);
+        }
+        Ok(result)
     }
 }
 
@@ -135,6 +148,30 @@ mod tests {
         assert!(!p.compatibility.openai_chat);
         assert!(!p.compatibility.openai_responses);
         assert!(!p.compatibility.anthropic_messages);
+    }
+
+    #[test]
+    fn load_with_env_substitution() {
+        temp_env::with_var("LACUNA_TEST_API_KEY", Some("sk-from-env"), || {
+            let dir = std::env::temp_dir().join("lacuna_test_env");
+            std::fs::create_dir_all(&dir).unwrap();
+            let path = dir.join("config_env.json5");
+            std::fs::write(
+                &path,
+                r#"{
+                  "providers": {
+                    "openai": {
+                      "baseurl": "https://api.openai.com/v1",
+                      "apikey": "${LACUNA_TEST_API_KEY}"
+                    }
+                  }
+                }"#,
+            )
+            .unwrap();
+            let config = Config::load(&path).unwrap();
+            assert_eq!(config.providers["openai"].apikey, "sk-from-env");
+            std::fs::remove_dir_all(&dir).unwrap();
+        });
     }
 
     #[test]
