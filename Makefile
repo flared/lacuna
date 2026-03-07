@@ -10,6 +10,15 @@ ci: build test format-check clippy
 build:
 	cargo build
 
+.PHONY: run
+run:
+	# NOTE(aviau): Claude Desktop's preview mode passes the PORT environment
+	# variable when the default port is not available:
+	# - https://code.claude.com/docs/en/desktop#port-conflicts
+	ANTHROPIC_API_KEY=$${ANTHROPIC_API_KEY:-} \
+	BEDROCK_API_KEY=$${BEDROCK_API_KEY:-} \
+	    cargo run -- --config example/config.json --port=$${PORT:-3000}
+
 .PHONY: docker-build
 docker-build:
 	docker build -t ghcr.io/flared/lacuna .
