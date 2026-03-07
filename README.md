@@ -20,6 +20,13 @@ The provided configuration file may include environment variable substitution us
 **Example Configuration**
 ```json
 {
+  "lacuna": {
+    "logging": {
+      "format": "console",
+      "level": "info"
+    },
+    "identity_header": "Tailscale-User-Login"
+  },
   "providers": {
     "anthropic": {
       "name": "Anthropic",
