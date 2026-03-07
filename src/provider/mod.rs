@@ -76,7 +76,7 @@ impl Provider {
     pub fn build_request(
         &self,
         incoming: axum::extract::Request,
-    ) -> Result<reqwest::RequestBuilder, anyhow::Error> {
+    ) -> Result<reqwest::Request, anyhow::Error> {
         let method = incoming.method().clone();
         let uri = incoming.uri().clone();
 
@@ -89,8 +89,21 @@ impl Provider {
 
         let body = reqwest::Body::wrap_stream(body.into_data_stream());
 
-        let request = self.client.request(method, url).headers(headers).body(body);
-        Ok(self.authenticator.authenticate(request))
+        let mut request = self
+            .client
+            .request(method, url)
+            .headers(headers)
+            .body(body)
+            .build()?;
+        self.authenticator.authenticate(&mut request)?;
+        Ok(request)
+    }
+
+    pub async fn send(
+        &self,
+        request: reqwest::Request,
+    ) -> Result<reqwest::Response, reqwest::Error> {
+        self.client.execute(request).await
     }
 }
 
@@ -131,8 +144,6 @@ mod tests {
         let provider = test_provider("https://api.anthropic.com", config::Authorization::None, "");
         let req = provider
             .build_request(incoming_request("GET", "/v1/messages", Body::empty()))
-            .unwrap()
-            .build()
             .unwrap();
         assert_eq!(req.url().as_str(), "https://api.anthropic.com/v1/messages");
     }
@@ -146,8 +157,6 @@ mod tests {
         );
         let req = provider
             .build_request(incoming_request("POST", "/v1/chat", Body::empty()))
-            .unwrap()
-            .build()
             .unwrap();
         assert_eq!(
             req.headers().get("authorization").unwrap(),
@@ -164,8 +173,6 @@ mod tests {
         );
         let req = provider
             .build_request(incoming_request("POST", "/v1/messages", Body::empty()))
-            .unwrap()
-            .build()
             .unwrap();
         assert_eq!(req.headers().get("x-api-key").unwrap(), "sk-ant-key");
         assert!(req.headers().get("authorization").is_none());
@@ -180,8 +187,6 @@ mod tests {
         );
         let req = provider
             .build_request(incoming_request("POST", "/v1/models", Body::empty()))
-            .unwrap()
-            .build()
             .unwrap();
         assert_eq!(req.headers().get("x-goog-api-key").unwrap(), "goog-key");
     }
@@ -191,8 +196,6 @@ mod tests {
         let provider = test_provider("https://example.com", config::Authorization::None, "");
         let req = provider
             .build_request(incoming_request("GET", "/health", Body::empty()))
-            .unwrap()
-            .build()
             .unwrap();
         assert!(req.headers().get("authorization").is_none());
         assert!(req.headers().get("x-api-key").is_none());
@@ -208,8 +211,6 @@ mod tests {
                 "/v1/models?limit=10",
                 Body::empty(),
             ))
-            .unwrap()
-            .build()
             .unwrap();
         assert_eq!(
             req.url().as_str(),
@@ -227,8 +228,6 @@ mod tests {
                 "/v1/chat",
                 Body::from(payload.to_vec()),
             ))
-            .unwrap()
-            .build()
             .unwrap();
         assert_eq!(req.method(), "POST");
         assert_eq!(req.url().as_str(), "https://api.example.com/v1/chat");
