@@ -8,6 +8,29 @@ use compatibility::Compatibility;
 
 pub use manager::ProviderManager;
 
+const HEADERS_TO_STRIP: &[&str] = &[
+    // Common hop-by-hop header that should be stripped.
+    "host",
+    "connection",
+    "keep-alive",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "te",
+    "trailers",
+    "transfer-encoding",
+    "upgrade",
+    // Tailscale specific headers.
+    "tailscale-user-login",
+    "tailscale-user-name",
+    "tailscale-user-profile-pic",
+];
+
+fn strip_hop_headers(headers: &mut axum::http::HeaderMap) {
+    for name in HEADERS_TO_STRIP {
+        headers.remove(*name);
+    }
+}
+
 pub struct Provider {
     #[allow(dead_code)]
     pub name: String,
@@ -41,9 +64,13 @@ impl Provider {
 
         let url = self.baseurl.join(path_and_query)?;
 
-        let body = reqwest::Body::wrap_stream(incoming.into_body().into_data_stream());
+        let (parts, body) = incoming.into_parts();
+        let mut headers = parts.headers;
+        strip_hop_headers(&mut headers);
 
-        let request = self.client.request(method, url).body(body);
+        let body = reqwest::Body::wrap_stream(body.into_data_stream());
+
+        let request = self.client.request(method, url).headers(headers).body(body);
         Ok(self.authenticator.authenticate(request))
     }
 }
