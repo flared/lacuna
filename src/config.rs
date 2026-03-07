@@ -15,6 +15,9 @@ pub struct Config {
 pub struct Lacuna {
     #[serde(default)]
     pub logging: crate::logging::Logging,
+
+    #[serde(default)]
+    pub identity_header: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
