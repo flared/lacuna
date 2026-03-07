@@ -17,6 +17,14 @@ struct Args {
     /// Path to the providers config file (YAML or JSON)
     #[arg(long)]
     config: PathBuf,
+
+    /// Host to listen on
+    #[arg(long, default_value = "127.0.0.1")]
+    host: String,
+
+    /// Port to listen on
+    #[arg(long, default_value_t = 3000)]
+    port: u16,
 }
 
 async fn health() -> &'static str {
@@ -92,7 +100,9 @@ async fn main() {
     }
     let manager = Arc::new(manager);
 
-    let listener = TcpListener::bind("127.0.0.1:3000").await.unwrap();
+    let listener = TcpListener::bind(format!("{}:{}", args.host, args.port))
+        .await
+        .unwrap();
     println!("listening on {}", listener.local_addr().unwrap());
     axum::serve(listener, app(manager)).await.unwrap();
 }
