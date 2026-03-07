@@ -1,4 +1,5 @@
 mod config;
+mod logging;
 mod provider;
 
 use axum::body::Body;
@@ -11,6 +12,7 @@ use provider::ProviderManager;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::net::TcpListener;
+use tracing::{debug, error, info};
 
 #[derive(Parser)]
 struct Args {
@@ -37,7 +39,7 @@ async fn proxy_handler(
 ) -> Response {
     let method = request.method().to_owned();
     let path = request.uri().path().to_owned();
-    println!("{} {}", method, path);
+    debug!(%method, %path, "downstream_req");
     let provider = match manager.get_for_path(&path) {
         Some(p) => p,
         None => return (StatusCode::NOT_FOUND, "no provider found for path").into_response(),
@@ -69,7 +71,7 @@ async fn proxy_handler(
     let headers = upstream_res.headers().clone();
     let body = Body::from_stream(upstream_res.bytes_stream());
 
-    println!("{} {} - {}", method, path, status);
+    info!(%method, %path, %status, "upstream_resp");
 
     let mut builder = Response::builder().status(status.as_u16());
     for (name, value) in headers.iter() {
@@ -92,12 +94,18 @@ async fn main() {
         eprintln!("failed to load config: {e}");
         std::process::exit(1);
     });
-    println!("loaded {} provider(s)", config.providers.len());
+
+    logging::init(&config.lacuna.logging).unwrap_or_else(|e| {
+        eprintln!("failed to initialize logging: {e}");
+        std::process::exit(1);
+    });
+
+    info!(count = config.providers.len(), "loaded providers");
 
     let mut manager = ProviderManager::new();
     for (key, provider_config) in &config.providers {
         let provider = provider::Provider::from_config(provider_config).unwrap_or_else(|e| {
-            eprintln!("failed to configure provider {key}: {e}");
+            error!(provider = %key, %e, "failed to configure provider");
             std::process::exit(1);
         });
         manager.add(provider);
@@ -107,7 +115,7 @@ async fn main() {
     let listener = TcpListener::bind(format!("{}:{}", args.host, args.port))
         .await
         .unwrap();
-    println!("listening on {}", listener.local_addr().unwrap());
+    info!(addr = %listener.local_addr().unwrap(), "listening");
     axum::serve(listener, app(manager)).await.unwrap();
 }
 

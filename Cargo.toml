@@ -18,7 +18,9 @@ json5 = ">=1"
 clap = { version = ">=4", features = ["derive"] }
 url = ">=2.5.8"
 regex = ">=1"
-anyhow = "1.0.102"
+anyhow = ">=1.0.102"
+tracing = ">=0.1"
+tracing-subscriber = { version = ">=0.3", features = ["json", "env-filter"] }
 
 [dev-dependencies]
 tower = { version = ">=0.5", features = ["util"] }
