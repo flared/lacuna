@@ -46,30 +46,17 @@ mod tests {
     use axum::http::{Request, StatusCode};
     use tower::ServiceExt;
 
-    use crate::config;
-    use crate::provider::{self, ProviderManager};
-
-    fn make_provider(key: &str, baseurl: &str) -> provider::Provider {
-        provider::Provider::from_config(
-            key,
-            &config::Provider {
-                name: key.to_owned(),
-                description: String::new(),
-                baseurl: baseurl.to_owned(),
-                models: vec![],
-                apikey: String::new(),
-                authorization: config::Authorization::None,
-                tailnet: false,
-                compatibility: config::Compatibility::default(),
-            },
-        )
-        .unwrap()
-    }
+    use crate::provider::ProviderManager;
+    use crate::test_utils::make_provider;
 
     #[tokio::test]
     async fn test_config() {
         let mut manager = ProviderManager::new();
-        manager.add(make_provider("test-provider", "https://api.example.com"));
+        manager.add(make_provider(
+            "test-provider",
+            "https://api.example.com",
+            Default::default(),
+        ));
 
         let response = crate::app::AppBuilder::new()
             .manager(manager)

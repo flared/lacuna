@@ -5,6 +5,8 @@ mod handlers;
 mod logging;
 mod metrics;
 mod provider;
+#[cfg(test)]
+mod test_utils;
 mod trace;
 
 use app::AppBuilder;

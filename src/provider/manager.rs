@@ -32,25 +32,8 @@ impl ProviderManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config;
     use crate::provider::compatibility::Compatibility;
-
-    fn make_provider(name: &str, compat: Compatibility) -> Provider {
-        Provider::from_config(
-            name,
-            &config::Provider {
-                name: name.to_owned(),
-                description: String::new(),
-                baseurl: "https://example.com".to_owned(),
-                models: vec![],
-                apikey: String::new(),
-                authorization: config::Authorization::None,
-                tailnet: false,
-                compatibility: compat,
-            },
-        )
-        .unwrap()
-    }
+    use crate::test_utils::make_provider;
 
     #[test]
     fn returns_matching_provider() {
@@ -58,11 +41,19 @@ mod tests {
 
         let mut openai_compat = Compatibility::default();
         openai_compat.openai_chat = true;
-        mgr.add(make_provider("openai", openai_compat));
+        mgr.add(make_provider(
+            "openai",
+            "https://example.com",
+            openai_compat,
+        ));
 
         let mut anthropic_compat = Compatibility::default();
         anthropic_compat.anthropic_messages = true;
-        mgr.add(make_provider("anthropic", anthropic_compat));
+        mgr.add(make_provider(
+            "anthropic",
+            "https://example.com",
+            anthropic_compat,
+        ));
 
         let openai = mgr.get_for_path("/v1/chat/completions").unwrap();
         assert_eq!(openai.name, "openai");
@@ -77,7 +68,7 @@ mod tests {
 
         let mut compat = Compatibility::default();
         compat.openai_chat = true;
-        mgr.add(make_provider("openai", compat));
+        mgr.add(make_provider("openai", "https://example.com", compat));
 
         assert!(mgr.get_for_path("/v1/messages").is_none());
     }

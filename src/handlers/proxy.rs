@@ -75,52 +75,12 @@ pub async fn proxy_handler(
 
 #[cfg(test)]
 mod tests {
-    use axum::Router;
     use axum::body::Body;
     use axum::http::{Request, StatusCode};
-    use tokio::net::TcpListener;
     use tower::ServiceExt;
 
-    use crate::config;
     use crate::provider::{self, ProviderManager};
-
-    /// Spawn an echo server that returns the path and body it received.
-    async fn spawn_echo_server() -> std::net::SocketAddr {
-        let upstream = Router::new().fallback(|request: axum::extract::Request| async move {
-            let path = request.uri().path().to_owned();
-            let body = axum::body::to_bytes(request.into_body(), usize::MAX)
-                .await
-                .unwrap();
-            format!("echoed {} {}", path, String::from_utf8_lossy(&body))
-        });
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        tokio::spawn(async move {
-            axum::serve(listener, upstream).await.unwrap();
-        });
-        addr
-    }
-
-    fn make_provider(
-        name: &str,
-        baseurl: &str,
-        compat: provider::compatibility::Compatibility,
-    ) -> provider::Provider {
-        provider::Provider::from_config(
-            name,
-            &config::Provider {
-                name: name.to_owned(),
-                description: String::new(),
-                baseurl: baseurl.to_owned(),
-                models: vec![],
-                apikey: String::new(),
-                authorization: config::Authorization::None,
-                tailnet: false,
-                compatibility: compat,
-            },
-        )
-        .unwrap()
-    }
+    use crate::test_utils::{make_provider, spawn_echo_server};
 
     #[tokio::test]
     async fn unmatched_path_returns_404() {

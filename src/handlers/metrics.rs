@@ -15,56 +15,18 @@ pub async fn handler() -> impl IntoResponse {
 
 #[cfg(test)]
 mod tests {
-    use axum::Router;
     use axum::body::Body;
     use axum::http::{Request, StatusCode};
-    use tokio::net::TcpListener;
     use tower::ServiceExt;
 
     use std::path::Path;
 
-    use crate::config;
     use crate::provider::{self, ProviderManager};
-
-    async fn spawn_echo_server() -> std::net::SocketAddr {
-        let upstream = Router::new().fallback(|request: axum::extract::Request| async move {
-            let path = request.uri().path().to_owned();
-            let body = axum::body::to_bytes(request.into_body(), usize::MAX)
-                .await
-                .unwrap();
-            format!("echoed {} {}", path, String::from_utf8_lossy(&body))
-        });
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        tokio::spawn(async move {
-            axum::serve(listener, upstream).await.unwrap();
-        });
-        addr
-    }
-
-    fn make_provider(
-        key: &str,
-        baseurl: &str,
-        compat: provider::compatibility::Compatibility,
-    ) -> provider::Provider {
-        provider::Provider::from_config(
-            key,
-            &config::Provider {
-                name: key.to_owned(),
-                description: String::new(),
-                baseurl: baseurl.to_owned(),
-                models: vec![],
-                apikey: String::new(),
-                authorization: config::Authorization::None,
-                tailnet: false,
-                compatibility: compat,
-            },
-        )
-        .unwrap()
-    }
+    use crate::test_utils::{make_provider, spawn_echo_server};
 
     #[tokio::test]
     async fn metrics_counts_requests_per_provider() {
+        crate::metrics::init();
         let addr = spawn_echo_server().await;
 
         let mut compat = provider::compatibility::Compatibility::default();
