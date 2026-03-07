@@ -58,6 +58,7 @@ cargo install cargo-edit
 ## Contributing
 
 - `make build`: Build the app.
+- `make run`: Run the app with the example config.
 - `make test`: Run tests.
 - `make format`: Format the code.
 - `make fix`: Automatically fix lint warnings.

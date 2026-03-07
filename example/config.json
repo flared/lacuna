@@ -1,0 +1,28 @@
+{
+  "lacuna": {
+    "logging": {
+      "format": "console",
+      "level": "info"
+    }
+  },
+  "providers": {
+    "anthropic": {
+      "name": "Anthropic",
+      "baseurl": "https://api.anthropic.com",
+      "authorization": "x-api-key",
+      "apikey": "${ANTHROPIC_API_KEY}",
+      "compatibility": {
+        "anthropic_messages": true
+      }
+    },
+    "bedrock": {
+      "name": "AWS Bedrock",
+      "baseurl": "https://bedrock-runtime.us-east-1.amazonaws.com",
+      "authorization": "bearer",
+      "apikey": "${BEDROCK_API_KEY}",
+      "compatibility": {
+        "bedrock_model_invoke": true
+      }
+    }
+  }
+}
