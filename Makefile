@@ -2,8 +2,18 @@
 
 DOCKER_IMAGE := "ghcr.io/flared/lacuna"
 
+#####################
+## GENERAL TARGETS ##
+#####################
+
 .PHONY: ci
-ci: build test format-check clippy
+ci: \
+	build \
+	test \
+	format-check \
+	clippy \
+	frontend-check \
+	frontend-format-check
 
 .PHONY: .all
 .all: build test
@@ -13,13 +23,73 @@ build:
 	cargo build
 
 .PHONY: run
-run:
+run: frontend-build
 	# NOTE(aviau): Claude Desktop's preview mode passes the PORT environment
 	# variable when the default port is not available:
 	# - https://code.claude.com/docs/en/desktop#port-conflicts
 	ANTHROPIC_API_KEY=$${ANTHROPIC_API_KEY:-} \
 	BEDROCK_API_KEY=$${BEDROCK_API_KEY:-} \
 	    cargo run -- --config example/config.json --port=$${PORT:-3000}
+
+.PHONY: fix
+fix:
+	cargo fix --allow-dirty
+
+.PHONY: format-check
+format-check:
+	cargo fmt --check
+
+.PHONY: clippy
+clippy:
+	cargo clippy
+
+.PHONY: clean
+clean: frontend-clean
+	rm -rf target
+
+#################
+## API TARGETS ##
+#################
+
+.PHONY: test
+test: frontend-build
+	cargo test
+
+.PHONY: format
+format:
+	cargo fmt
+
+######################
+## FRONTEND TARGETS ##
+######################
+
+.PHONY: frontend-build
+frontend-build:
+	$(MAKE) -C frontend build
+
+.PHONY: frontend-check
+frontend-check:
+	$(MAKE) -C frontend check
+
+.PHONY: frontend-format
+frontend-format:
+	$(MAKE) -C frontend format
+
+.PHONY: frontend-format-check
+frontend-format-check:
+	$(MAKE) -C frontend format-check
+
+.PHONY: frontend-run
+frontend-run:
+	$(MAKE) -C frontend run
+
+.PHONY: frontend-clean
+frontend-clean:
+	$(MAKE) -C frontend clean
+
+###################
+## DOCKER TARGETS #
+###################
 
 .PHONY: docker-build
 docker-build:
@@ -39,27 +109,3 @@ docker-run:
 		--host=0.0.0.0 \
 		--port=3000 \
 		--config=/opt/lacuna/config.json
-
-.PHONY: test
-test:
-	cargo test
-
-.PHONY: format
-format:
-	cargo fmt
-
-.PHONY: fix
-fix:
-	cargo fix --allow-dirty
-
-.PHONY: format-check
-format-check:
-	cargo fmt --check
-
-.PHONY: clippy
-clippy:
-	cargo clippy
-
-.PHONY: clean
-clean:
-	rm -rf target

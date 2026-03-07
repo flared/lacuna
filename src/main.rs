@@ -23,7 +23,7 @@ struct Args {
     config: PathBuf,
 
     /// Path to the assets directory
-    #[arg(long, default_value = "assets")]
+    #[arg(long, default_value = "frontend/dist")]
     assets: PathBuf,
 
     /// Host to listen on

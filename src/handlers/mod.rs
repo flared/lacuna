@@ -1,3 +1,4 @@
+pub(crate) mod api;
 pub(crate) mod health;
 pub(crate) mod metrics;
 pub(crate) mod proxy;
