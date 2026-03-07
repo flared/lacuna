@@ -1,7 +1,7 @@
 mod config;
+mod handlers;
 mod logging;
 mod provider;
-mod proxy_handler;
 
 use axum::{Router, routing::get};
 use clap::Parser;
@@ -26,23 +26,19 @@ struct Args {
     port: u16,
 }
 
-async fn health() -> &'static str {
-    "ok"
-}
-
 pub(crate) fn app(manager: ProviderManager) -> Router {
-    let mut router = Router::new().route("/health", get(health));
+    let mut router = Router::new().route("/health", get(handlers::health::health));
 
     for (name, provider) in manager.iter() {
         let provider_router = Router::new()
-            .fallback(proxy_handler::provider_proxy_handler)
+            .fallback(handlers::proxy::provider_proxy_handler)
             .with_state(Arc::clone(provider));
         router = router.nest(&format!("/{name}"), provider_router);
     }
 
     let manager = Arc::new(manager);
     router
-        .fallback(proxy_handler::proxy_handler)
+        .fallback(handlers::proxy::proxy_handler)
         .with_state(manager)
 }
 
@@ -74,32 +70,4 @@ async fn main() {
         .unwrap();
     info!(addr = %listener.local_addr().unwrap(), "listening");
     axum::serve(listener, app(manager)).await.unwrap();
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use axum::body::Body;
-    use axum::http::{Request, StatusCode};
-    use tower::ServiceExt;
-
-    #[tokio::test]
-    async fn health_returns_ok() {
-        let response = app(ProviderManager::new())
-            .oneshot(
-                Request::builder()
-                    .uri("/health")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::OK);
-
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-            .await
-            .unwrap();
-        assert_eq!(&body[..], b"ok");
-    }
 }
