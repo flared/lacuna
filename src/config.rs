@@ -5,7 +5,16 @@ use std::path::Path;
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub struct Config {
+    #[serde(default)]
+    pub lacuna: Lacuna,
+
     pub providers: HashMap<String, Provider>,
+}
+
+#[derive(Debug, Deserialize, Serialize, PartialEq, Default)]
+pub struct Lacuna {
+    #[serde(default)]
+    pub logging: crate::logging::Logging,
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
