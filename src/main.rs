@@ -3,10 +3,10 @@ mod handlers;
 mod logging;
 mod provider;
 
-use axum::{Router, routing::get};
+use axum::{Router, response::Redirect, routing::get};
 use clap::Parser;
 use provider::ProviderManager;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tower_http::trace::TraceLayer;
@@ -18,6 +18,10 @@ struct Args {
     #[arg(long)]
     config: PathBuf,
 
+    /// Path to the assets directory
+    #[arg(long, default_value = "assets")]
+    assets: PathBuf,
+
     /// Host to listen on
     #[arg(long, default_value = "127.0.0.1")]
     host: String,
@@ -27,8 +31,11 @@ struct Args {
     port: u16,
 }
 
-pub(crate) fn app(manager: ProviderManager) -> Router {
-    let mut router = Router::new().route("/health", get(handlers::health::health));
+pub(crate) fn app(manager: ProviderManager, assets_path: &Path) -> Router {
+    let mut router = Router::new()
+        .route("/health", get(handlers::health::health))
+        .nest("/ui", handlers::ui::router(assets_path))
+        .route("/", get(|| async { Redirect::permanent("/ui") }));
 
     for (name, provider) in manager.iter() {
         let provider_router = Router::new()
@@ -71,5 +78,7 @@ async fn main() {
         .await
         .unwrap();
     info!(addr = %listener.local_addr().unwrap(), "listening");
-    axum::serve(listener, app(manager)).await.unwrap();
+    axum::serve(listener, app(manager, &args.assets))
+        .await
+        .unwrap();
 }

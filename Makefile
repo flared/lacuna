@@ -1,5 +1,7 @@
 .DEFAULT_GOAL := build
 
+DOCKER_IMAGE := "ghcr.io/flared/lacuna"
+
 .PHONY: ci
 ci: build test format-check clippy
 
@@ -21,7 +23,22 @@ run:
 
 .PHONY: docker-build
 docker-build:
-	docker build -t ghcr.io/flared/lacuna .
+	docker build -t ${DOCKER_IMAGE} .
+
+.PHONY: docker-run
+docker-run:
+	docker run \
+		--init \
+		-it \
+		--rm \
+		-p 3000:3000 \
+		-v ./example/config.json:/opt/lacuna/config.json \
+		--env=ANTHROPIC_API_KEY=$${ANTHROPIC_API_KEY:-} \
+		--env=BEDROCK_API_KEY=$${BEDROCK_API_KEY:-} \
+		${DOCKER_IMAGE} \
+		--host=0.0.0.0 \
+		--port=3000 \
+		--config=/opt/lacuna/config.json
 
 .PHONY: test
 test:

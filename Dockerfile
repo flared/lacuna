@@ -6,4 +6,5 @@ RUN cargo build --release
 
 FROM alpine:latest
 COPY --from=builder /build/target/release/lacuna /usr/local/bin/lacuna
-ENTRYPOINT ["lacuna"]
+COPY assets /opt/lacuna/assets
+ENTRYPOINT [ "lacuna", "--assets=/opt/lacuna/assets" ]

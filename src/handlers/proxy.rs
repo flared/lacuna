@@ -77,6 +77,8 @@ mod tests {
     use tokio::net::TcpListener;
     use tower::ServiceExt;
 
+    use std::path::Path;
+
     use crate::config;
     use crate::provider::{self, ProviderManager};
 
@@ -117,7 +119,7 @@ mod tests {
 
     #[tokio::test]
     async fn unmatched_path_returns_404() {
-        let response = crate::app(ProviderManager::new())
+        let response = crate::app(ProviderManager::new(), Path::new("assets"))
             .oneshot(
                 Request::builder()
                     .uri("/v1/chat/completions")
@@ -143,7 +145,7 @@ mod tests {
             make_provider("provider-name", &format!("http://{addr}"), compat),
         );
 
-        let response = crate::app(manager)
+        let response = crate::app(manager, Path::new("assets"))
             .oneshot(
                 Request::builder()
                     .method("POST")
@@ -177,7 +179,7 @@ mod tests {
             make_provider("My OpenAI Provider", &format!("http://{addr}"), compat),
         );
 
-        let response = crate::app(manager)
+        let response = crate::app(manager, Path::new("assets"))
             .oneshot(
                 Request::builder()
                     .method("POST")

@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Lacuna</title>
+</head>
+<body>
+  <h1>Lacuna</h1>
+  <pre id="config">Loading...</pre>
+  <script>
+    fetch('/ui/config')
+      .then(r => r.json())
+      .then(data => {
+        document.getElementById('config').textContent = JSON.stringify(data, null, 2);
+      })
+      .catch(e => {
+        document.getElementById('config').textContent = 'Error: ' + e;
+      });
+  </script>
+</body>
+</html>
