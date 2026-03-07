@@ -67,7 +67,7 @@ async fn main() {
             error!(provider = %key, %e, "failed to configure provider");
             std::process::exit(1);
         });
-        manager.add(provider);
+        manager.add(key.clone(), provider);
     }
     let listener = TcpListener::bind(format!("{}:{}", args.host, args.port))
         .await
