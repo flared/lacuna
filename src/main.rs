@@ -1,3 +1,4 @@
+pub(crate) mod app;
 mod auth;
 mod config;
 mod handlers;
@@ -5,11 +6,10 @@ mod logging;
 mod provider;
 mod trace;
 
-use axum::{Router, response::Redirect, routing::get};
+use app::AppBuilder;
 use clap::Parser;
 use provider::ProviderManager;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::path::PathBuf;
 use tokio::net::TcpListener;
 use tracing::{error, info};
 
@@ -30,43 +30,6 @@ struct Args {
     /// Port to listen on
     #[arg(long, default_value_t = 3000)]
     port: u16,
-}
-
-#[cfg(test)]
-pub(crate) fn app(manager: ProviderManager, assets_path: &Path) -> Router {
-    app_with_identity_header(manager, assets_path, None)
-}
-
-pub(crate) fn app_with_identity_header(
-    manager: ProviderManager,
-    assets_path: &Path,
-    identity_header: Option<String>,
-) -> Router {
-    let mut router = Router::new()
-        .route("/health", get(handlers::health::health))
-        .nest("/ui", handlers::ui::router(assets_path))
-        .route("/", get(|| async { Redirect::permanent("/ui") }));
-
-    for (name, provider) in manager.iter() {
-        let provider_router = Router::new()
-            .fallback(handlers::proxy::provider_proxy_handler)
-            .with_state(Arc::clone(provider));
-        router = router.nest(&format!("/{name}"), provider_router);
-    }
-
-    let manager = Arc::new(manager);
-    let mut router = router
-        .fallback(handlers::proxy::proxy_handler)
-        .with_state(manager)
-        .layer(trace::layer());
-
-    if let Some(header_name) = identity_header {
-        router = router.layer(axum::middleware::from_fn(move |request, next| {
-            auth::identity_middleware(header_name.clone(), request, next)
-        }));
-    }
-
-    router
 }
 
 #[tokio::main]
@@ -92,14 +55,17 @@ async fn main() {
         });
         manager.add(key.clone(), provider);
     }
+
+    let app = AppBuilder::new()
+        .manager(manager)
+        .assets_path(&args.assets)
+        .identity_header(config.lacuna.identity_header)
+        .build();
+
     let listener = TcpListener::bind(format!("{}:{}", args.host, args.port))
         .await
         .unwrap();
     info!(addr = %listener.local_addr().unwrap(), "listening");
-    axum::serve(
-        listener,
-        app_with_identity_header(manager, &args.assets, config.lacuna.identity_header),
-    )
-    .await
-    .unwrap();
+
+    axum::serve(listener, app).await.unwrap();
 }

@@ -8,12 +8,10 @@ mod tests {
     use axum::http::{Request, StatusCode};
     use tower::ServiceExt;
 
-    use crate::provider::ProviderManager;
-    use std::path::Path;
-
     #[tokio::test]
     async fn health_returns_ok() {
-        let response = crate::app(ProviderManager::new(), Path::new("assets"))
+        let response = crate::app::AppBuilder::new()
+            .build()
             .oneshot(
                 Request::builder()
                     .uri("/health")
