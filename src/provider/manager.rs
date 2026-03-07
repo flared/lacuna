@@ -14,9 +14,8 @@ impl ProviderManager {
         }
     }
 
-    pub fn add(&mut self, provider: Provider) {
-        self.providers
-            .insert(provider.name.clone(), Arc::new(provider));
+    pub fn add(&mut self, key: String, provider: Provider) {
+        self.providers.insert(key, Arc::new(provider));
     }
 
     pub fn get_for_path(&self, path: &str) -> Option<&Arc<Provider>> {
@@ -56,11 +55,14 @@ mod tests {
 
         let mut openai_compat = Compatibility::default();
         openai_compat.openai_chat = true;
-        mgr.add(make_provider("openai", openai_compat));
+        mgr.add("openai".to_owned(), make_provider("openai", openai_compat));
 
         let mut anthropic_compat = Compatibility::default();
         anthropic_compat.anthropic_messages = true;
-        mgr.add(make_provider("anthropic", anthropic_compat));
+        mgr.add(
+            "anthropic".to_owned(),
+            make_provider("anthropic", anthropic_compat),
+        );
 
         let openai = mgr.get_for_path("/v1/chat/completions").unwrap();
         assert_eq!(openai.name, "openai");
@@ -75,7 +77,7 @@ mod tests {
 
         let mut compat = Compatibility::default();
         compat.openai_chat = true;
-        mgr.add(make_provider("openai", compat));
+        mgr.add("openai".to_owned(), make_provider("openai", compat));
 
         assert!(mgr.get_for_path("/v1/messages").is_none());
     }

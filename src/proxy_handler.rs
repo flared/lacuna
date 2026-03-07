@@ -138,7 +138,10 @@ mod tests {
         compat.openai_chat = true;
 
         let mut manager = ProviderManager::new();
-        manager.add(make_provider("test", &format!("http://{addr}"), compat));
+        manager.add(
+            "provider-key".to_owned(),
+            make_provider("provider-name", &format!("http://{addr}"), compat),
+        );
 
         let response = crate::app(manager)
             .oneshot(
@@ -169,7 +172,10 @@ mod tests {
         compat.openai_chat = true;
 
         let mut manager = ProviderManager::new();
-        manager.add(make_provider("myopenai", &format!("http://{addr}"), compat));
+        manager.add(
+            "myopenai".to_owned(),
+            make_provider("My OpenAI Provider", &format!("http://{addr}"), compat),
+        );
 
         let response = crate::app(manager)
             .oneshot(
