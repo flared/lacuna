@@ -3,15 +3,14 @@ use std::sync::Arc;
 
 use super::Provider;
 
+#[derive(Default)]
 pub struct ProviderManager {
     providers: HashMap<String, Arc<Provider>>,
 }
 
 impl ProviderManager {
     pub fn new() -> Self {
-        Self {
-            providers: HashMap::new(),
-        }
+        Self::default()
     }
 
     pub fn add(&mut self, key: String, provider: Provider) {

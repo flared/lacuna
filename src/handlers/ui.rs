@@ -42,8 +42,6 @@ pub fn router(assets_path: &Path) -> Router<Arc<ProviderManager>> {
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
-
     use axum::body::Body;
     use axum::http::{Request, StatusCode};
     use tower::ServiceExt;
@@ -73,7 +71,9 @@ mod tests {
             make_provider("Test Provider", "https://api.example.com"),
         );
 
-        let response = crate::app(manager, Path::new("assets"))
+        let response = crate::app::AppBuilder::new()
+            .manager(manager)
+            .build()
             .oneshot(
                 Request::builder()
                     .uri("/ui/config")
@@ -100,7 +100,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_ui_index() {
-        let response = crate::app(ProviderManager::new(), Path::new("assets"))
+        let response = crate::app::AppBuilder::new()
+            .build()
             .oneshot(Request::builder().uri("/ui").body(Body::empty()).unwrap())
             .await
             .unwrap();
@@ -116,7 +117,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_root_redirects_to_ui() {
-        let response = crate::app(ProviderManager::new(), Path::new("assets"))
+        let response = crate::app::AppBuilder::new()
+            .build()
             .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
             .await
             .unwrap();
