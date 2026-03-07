@@ -18,6 +18,7 @@ json5 = ">=1"
 clap = { version = ">=4", features = ["derive"] }
 url = ">=2.5.8"
 regex = ">=1"
+anyhow = "1.0.102"
 
 [dev-dependencies]
 tower = { version = ">=0.5", features = ["util"] }

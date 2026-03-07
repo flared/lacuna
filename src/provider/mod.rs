@@ -18,7 +18,7 @@ pub struct Provider {
 }
 
 impl Provider {
-    pub fn from_config(config: &config::Provider) -> Result<Self, url::ParseError> {
+    pub fn from_config(config: &config::Provider) -> Result<Self, anyhow::Error> {
         let baseurl = reqwest::Url::parse(&config.baseurl)?;
         let authenticator = build_authenticator(&config.authorization, &config.apikey);
         Ok(Self {
@@ -33,7 +33,7 @@ impl Provider {
     pub fn build_request(
         &self,
         incoming: axum::extract::Request,
-    ) -> Result<reqwest::RequestBuilder, url::ParseError> {
+    ) -> Result<reqwest::RequestBuilder, anyhow::Error> {
         let method = incoming.method().clone();
         let uri = incoming.uri().clone();
 
