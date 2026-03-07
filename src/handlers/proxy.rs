@@ -5,6 +5,8 @@ use axum::response::{IntoResponse, Response};
 use std::sync::Arc;
 use tracing::{debug, info};
 
+use crate::auth;
+use crate::metrics;
 use crate::provider::{self, ProviderManager};
 
 async fn forward_to_provider(
@@ -13,6 +15,8 @@ async fn forward_to_provider(
 ) -> Response {
     let method = request.method().to_owned();
     let path = request.uri().path().to_owned();
+    let user = auth::get_caller_identity(&request).unwrap_or_default();
+    metrics::record_request(&provider.key, &user);
     debug!(%method, %path, "downstream_req");
 
     let upstream_req = match provider.build_request(request) {
@@ -102,16 +106,19 @@ mod tests {
         baseurl: &str,
         compat: provider::compatibility::Compatibility,
     ) -> provider::Provider {
-        provider::Provider::from_config(&config::Provider {
-            name: name.to_owned(),
-            description: String::new(),
-            baseurl: baseurl.to_owned(),
-            models: vec![],
-            apikey: String::new(),
-            authorization: config::Authorization::None,
-            tailnet: false,
-            compatibility: compat,
-        })
+        provider::Provider::from_config(
+            name,
+            &config::Provider {
+                name: name.to_owned(),
+                description: String::new(),
+                baseurl: baseurl.to_owned(),
+                models: vec![],
+                apikey: String::new(),
+                authorization: config::Authorization::None,
+                tailnet: false,
+                compatibility: compat,
+            },
+        )
         .unwrap()
     }
 
@@ -139,10 +146,11 @@ mod tests {
         compat.openai_chat = true;
 
         let mut manager = ProviderManager::new();
-        manager.add(
-            "provider-key".to_owned(),
-            make_provider("provider-name", &format!("http://{addr}"), compat),
-        );
+        manager.add(make_provider(
+            "provider-key",
+            &format!("http://{addr}"),
+            compat,
+        ));
 
         let response = crate::app::AppBuilder::new()
             .manager(manager)
@@ -175,10 +183,7 @@ mod tests {
         compat.openai_chat = true;
 
         let mut manager = ProviderManager::new();
-        manager.add(
-            "myopenai".to_owned(),
-            make_provider("My OpenAI Provider", &format!("http://{addr}"), compat),
-        );
+        manager.add(make_provider("myopenai", &format!("http://{addr}"), compat));
 
         let response = crate::app::AppBuilder::new()
             .manager(manager)

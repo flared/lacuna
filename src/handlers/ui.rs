@@ -49,27 +49,27 @@ mod tests {
     use crate::config;
     use crate::provider::{self, ProviderManager};
 
-    fn make_provider(name: &str, baseurl: &str) -> provider::Provider {
-        provider::Provider::from_config(&config::Provider {
-            name: name.to_owned(),
-            description: String::new(),
-            baseurl: baseurl.to_owned(),
-            models: vec![],
-            apikey: String::new(),
-            authorization: config::Authorization::None,
-            tailnet: false,
-            compatibility: config::Compatibility::default(),
-        })
+    fn make_provider(key: &str, baseurl: &str) -> provider::Provider {
+        provider::Provider::from_config(
+            key,
+            &config::Provider {
+                name: key.to_owned(),
+                description: String::new(),
+                baseurl: baseurl.to_owned(),
+                models: vec![],
+                apikey: String::new(),
+                authorization: config::Authorization::None,
+                tailnet: false,
+                compatibility: config::Compatibility::default(),
+            },
+        )
         .unwrap()
     }
 
     #[tokio::test]
     async fn test_config() {
         let mut manager = ProviderManager::new();
-        manager.add(
-            "test-provider".to_owned(),
-            make_provider("Test Provider", "https://api.example.com"),
-        );
+        manager.add(make_provider("test-provider", "https://api.example.com"));
 
         let response = crate::app::AppBuilder::new()
             .manager(manager)
@@ -93,7 +93,7 @@ mod tests {
 
         assert_eq!(providers.len(), 1);
         let provider = &providers["test-provider"];
-        assert_eq!(provider["name"], "Test Provider");
+        assert_eq!(provider["name"], "test-provider");
         assert_eq!(provider["baseurl"], "https://api.example.com/");
         assert!(provider.get("apikey").is_none());
     }

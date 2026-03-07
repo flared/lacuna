@@ -3,6 +3,7 @@ mod auth;
 mod config;
 mod handlers;
 mod logging;
+mod metrics;
 mod provider;
 mod trace;
 
@@ -39,21 +40,22 @@ async fn main() {
         eprintln!("failed to load config: {e}");
         std::process::exit(1);
     });
+    info!(count = config.providers.len(), "loaded providers");
 
     logging::init(&config.lacuna.logging).unwrap_or_else(|e| {
         eprintln!("failed to initialize logging: {e}");
         std::process::exit(1);
     });
 
-    info!(count = config.providers.len(), "loaded providers");
+    metrics::init();
 
     let mut manager = ProviderManager::new();
     for (key, provider_config) in &config.providers {
-        let provider = provider::Provider::from_config(provider_config).unwrap_or_else(|e| {
+        let provider = provider::Provider::from_config(key, provider_config).unwrap_or_else(|e| {
             error!(provider = %key, %e, "failed to configure provider");
             std::process::exit(1);
         });
-        manager.add(key.clone(), provider);
+        manager.add(provider);
     }
 
     let app = AppBuilder::new()

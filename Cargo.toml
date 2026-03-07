@@ -23,6 +23,8 @@ anyhow = ">=1.0.102"
 tracing = ">=0.1"
 tracing-subscriber = { version = ">=0.3", features = ["json", "env-filter"] }
 tower-http = { version = ">=0.6", features = ["trace", "fs"] }
+metrics = ">=0.24"
+metrics-exporter-prometheus = ">=0.16"
 
 [dev-dependencies]
 tower = { version = ">=0.5", features = ["util"] }

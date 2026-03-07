@@ -13,7 +13,8 @@ impl ProviderManager {
         Self::default()
     }
 
-    pub fn add(&mut self, key: String, provider: Provider) {
+    pub fn add(&mut self, provider: Provider) {
+        let key = provider.key.clone();
         self.providers.insert(key, Arc::new(provider));
     }
 
@@ -35,16 +36,19 @@ mod tests {
     use crate::provider::compatibility::Compatibility;
 
     fn make_provider(name: &str, compat: Compatibility) -> Provider {
-        Provider::from_config(&config::Provider {
-            name: name.to_owned(),
-            description: String::new(),
-            baseurl: "https://example.com".to_owned(),
-            models: vec![],
-            apikey: String::new(),
-            authorization: config::Authorization::None,
-            tailnet: false,
-            compatibility: compat,
-        })
+        Provider::from_config(
+            name,
+            &config::Provider {
+                name: name.to_owned(),
+                description: String::new(),
+                baseurl: "https://example.com".to_owned(),
+                models: vec![],
+                apikey: String::new(),
+                authorization: config::Authorization::None,
+                tailnet: false,
+                compatibility: compat,
+            },
+        )
         .unwrap()
     }
 
@@ -54,14 +58,11 @@ mod tests {
 
         let mut openai_compat = Compatibility::default();
         openai_compat.openai_chat = true;
-        mgr.add("openai".to_owned(), make_provider("openai", openai_compat));
+        mgr.add(make_provider("openai", openai_compat));
 
         let mut anthropic_compat = Compatibility::default();
         anthropic_compat.anthropic_messages = true;
-        mgr.add(
-            "anthropic".to_owned(),
-            make_provider("anthropic", anthropic_compat),
-        );
+        mgr.add(make_provider("anthropic", anthropic_compat));
 
         let openai = mgr.get_for_path("/v1/chat/completions").unwrap();
         assert_eq!(openai.name, "openai");
@@ -76,7 +77,7 @@ mod tests {
 
         let mut compat = Compatibility::default();
         compat.openai_chat = true;
-        mgr.add("openai".to_owned(), make_provider("openai", compat));
+        mgr.add(make_provider("openai", compat));
 
         assert!(mgr.get_for_path("/v1/messages").is_none());
     }
