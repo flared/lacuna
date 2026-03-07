@@ -19,13 +19,29 @@ mod tests {
     use axum::http::{Request, StatusCode};
     use tower::ServiceExt;
 
-    use std::path::Path;
-
+    use crate::app::AppBuilder;
     use crate::provider::{self, ProviderManager};
     use crate::test_utils::{make_provider, spawn_echo_server};
 
+    async fn get_metrics_body(app: axum::Router) -> String {
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/metrics")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        String::from_utf8(bytes.to_vec()).unwrap()
+    }
+
     #[tokio::test]
-    async fn metrics_counts_requests_per_provider() {
+    async fn metrics_counts_anonymous_request() {
         crate::metrics::init();
         let addr = spawn_echo_server().await;
 
@@ -34,14 +50,13 @@ mod tests {
 
         let mut manager = ProviderManager::new();
         manager.add(make_provider(
-            "test-metrics",
+            "test-anon",
             &format!("http://{addr}"),
             compat,
         ));
 
-        let app = crate::app(manager, Path::new("assets"));
+        let app = AppBuilder::new().manager(manager).build();
 
-        // Make a proxy request to the provider.
         let response = app
             .clone()
             .oneshot(
@@ -55,34 +70,53 @@ mod tests {
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        // Hit the metrics endpoint.
+        let body = get_metrics_body(app).await;
+        assert!(
+            body.contains(r#"lacuna_provider_requests_total{provider="test-anon",user=""} 1"#),
+            "expected anonymous request metric line, got:\n{body}"
+        );
+    }
+
+    #[tokio::test]
+    async fn metrics_counts_identified_request() {
+        crate::metrics::init();
+        let addr = spawn_echo_server().await;
+
+        let mut compat = provider::compatibility::Compatibility::default();
+        compat.openai_chat = true;
+
+        let mut manager = ProviderManager::new();
+        manager.add(make_provider(
+            "test-identified",
+            &format!("http://{addr}"),
+            compat,
+        ));
+
+        let app = AppBuilder::new()
+            .manager(manager)
+            .identity_header(Some("X-User-Email".to_owned()))
+            .build();
+
         let response = app
+            .clone()
             .oneshot(
                 Request::builder()
-                    .uri("/metrics")
-                    .body(Body::empty())
+                    .method("POST")
+                    .uri("/v1/chat/completions")
+                    .header("X-User-Email", "alice@example.com")
+                    .body(Body::from("hello"))
                     .unwrap(),
             )
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-            .await
-            .unwrap();
-        let body = String::from_utf8(body.to_vec()).unwrap();
-
+        let body = get_metrics_body(app).await;
         assert!(
-            body.contains("lacuna_provider_requests_total"),
-            "metrics should contain the request counter"
-        );
-        assert!(
-            body.contains("provider=\"test-metrics\""),
-            "metrics should contain the provider label"
-        );
-        assert!(
-            body.contains("user=\"\""),
-            "metrics should contain an empty user label when no identity is set"
+            body.contains(
+                r#"lacuna_provider_requests_total{provider="test-identified",user="alice@example.com"} 1"#
+            ),
+            "expected identified request metric line, got:\n{body}"
         );
     }
 }
