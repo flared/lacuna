@@ -45,7 +45,7 @@ pub enum Authorization {
 }
 
 impl Config {
-    pub fn load(path: &Path) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn load(path: &Path) -> Result<Self, anyhow::Error> {
         let contents = std::fs::read_to_string(path)?;
         let config: Config = json5::from_str(&contents)?;
         Ok(config)
