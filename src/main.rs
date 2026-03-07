@@ -9,6 +9,7 @@ use provider::ProviderManager;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::net::TcpListener;
+use tower_http::trace::TraceLayer;
 use tracing::{error, info};
 
 #[derive(Parser)]
@@ -40,6 +41,7 @@ pub(crate) fn app(manager: ProviderManager) -> Router {
     router
         .fallback(handlers::proxy::proxy_handler)
         .with_state(manager)
+        .layer(TraceLayer::new_for_http())
 }
 
 #[tokio::main]
