@@ -1,7 +1,9 @@
+mod auth;
 mod config;
 mod handlers;
 mod logging;
 mod provider;
+mod trace;
 
 use axum::{Router, response::Redirect, routing::get};
 use clap::Parser;
@@ -9,7 +11,6 @@ use provider::ProviderManager;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::net::TcpListener;
-use tower_http::trace::TraceLayer;
 use tracing::{error, info};
 
 #[derive(Parser)]
@@ -31,7 +32,16 @@ struct Args {
     port: u16,
 }
 
+#[cfg(test)]
 pub(crate) fn app(manager: ProviderManager, assets_path: &Path) -> Router {
+    app_with_identity_header(manager, assets_path, None)
+}
+
+pub(crate) fn app_with_identity_header(
+    manager: ProviderManager,
+    assets_path: &Path,
+    identity_header: Option<String>,
+) -> Router {
     let mut router = Router::new()
         .route("/health", get(handlers::health::health))
         .nest("/ui", handlers::ui::router(assets_path))
@@ -45,10 +55,18 @@ pub(crate) fn app(manager: ProviderManager, assets_path: &Path) -> Router {
     }
 
     let manager = Arc::new(manager);
-    router
+    let mut router = router
         .fallback(handlers::proxy::proxy_handler)
         .with_state(manager)
-        .layer(TraceLayer::new_for_http())
+        .layer(trace::layer());
+
+    if let Some(header_name) = identity_header {
+        router = router.layer(axum::middleware::from_fn(move |request, next| {
+            auth::identity_middleware(header_name.clone(), request, next)
+        }));
+    }
+
+    router
 }
 
 #[tokio::main]
@@ -78,7 +96,10 @@ async fn main() {
         .await
         .unwrap();
     info!(addr = %listener.local_addr().unwrap(), "listening");
-    axum::serve(listener, app(manager, &args.assets))
-        .await
-        .unwrap();
+    axum::serve(
+        listener,
+        app_with_identity_header(manager, &args.assets, config.lacuna.identity_header),
+    )
+    .await
+    .unwrap();
 }

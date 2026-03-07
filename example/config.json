@@ -3,7 +3,8 @@
     "logging": {
       "format": "console",
       "level": "info"
-    }
+    },
+    "identity_header": "Tailscale-User-Login"
   },
   "providers": {
     "anthropic": {
