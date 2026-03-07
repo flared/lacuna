@@ -54,7 +54,7 @@ fn strip_hop_headers(mut headers: axum::http::HeaderMap) -> axum::http::HeaderMa
 pub struct Provider {
     #[allow(dead_code)]
     pub name: String,
-    baseurl: reqwest::Url,
+    pub baseurl: reqwest::Url,
     client: reqwest::Client,
     authenticator: Box<dyn ProviderAuthenticator + Send + Sync>,
     pub compatibility: Compatibility,

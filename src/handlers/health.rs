@@ -9,10 +9,11 @@ mod tests {
     use tower::ServiceExt;
 
     use crate::provider::ProviderManager;
+    use std::path::Path;
 
     #[tokio::test]
     async fn health_returns_ok() {
-        let response = crate::app(ProviderManager::new())
+        let response = crate::app(ProviderManager::new(), Path::new("assets"))
             .oneshot(
                 Request::builder()
                     .uri("/health")
