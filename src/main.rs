@@ -27,7 +27,9 @@ async fn proxy_handler(
     State(manager): State<Arc<ProviderManager>>,
     request: axum::extract::Request,
 ) -> Response {
+    let method = request.method().to_owned();
     let path = request.uri().path().to_owned();
+    println!("{} {}", method, path);
     let provider = match manager.get_for_path(&path) {
         Some(p) => p,
         None => return (StatusCode::NOT_FOUND, "no provider found for path").into_response(),
@@ -58,6 +60,8 @@ async fn proxy_handler(
     let status = upstream_res.status();
     let headers = upstream_res.headers().clone();
     let body = Body::from_stream(upstream_res.bytes_stream());
+
+    println!("{} {} - {}", method, path, status);
 
     let mut builder = Response::builder().status(status.as_u16());
     for (name, value) in headers.iter() {
@@ -152,6 +156,11 @@ mod tests {
                 .get("authorization")
                 .map(|v| v.to_str().unwrap().to_owned())
                 .unwrap_or_default();
+            let custom = request
+                .headers()
+                .get("x-custom-header")
+                .map(|v| v.to_str().unwrap().to_owned())
+                .unwrap_or_default();
             let path = request.uri().path().to_owned();
             let body = axum::body::to_bytes(request.into_body(), usize::MAX)
                 .await
@@ -159,6 +168,7 @@ mod tests {
             let mut headers = axum::http::HeaderMap::new();
             headers.insert("x-test-header", "hello".parse().unwrap());
             headers.insert("x-received-auth", auth.parse().unwrap());
+            headers.insert("x-received-custom", custom.parse().unwrap());
             (
                 StatusCode::OK,
                 headers,
@@ -193,6 +203,7 @@ mod tests {
                 Request::builder()
                     .method("POST")
                     .uri("/v1/chat/completions")
+                    .header("x-custom-header", "custom-value")
                     .body(Body::from("test-body"))
                     .unwrap(),
             )
@@ -204,6 +215,10 @@ mod tests {
         assert_eq!(
             response.headers().get("x-received-auth").unwrap(),
             "Bearer sk-test-key"
+        );
+        assert_eq!(
+            response.headers().get("x-received-custom").unwrap(),
+            "custom-value"
         );
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX)
