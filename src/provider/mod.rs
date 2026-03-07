@@ -9,7 +9,7 @@ use compatibility::Compatibility;
 pub use manager::ProviderManager;
 
 const HEADERS_TO_STRIP: &[&str] = &[
-    // Common hop-by-hop header that should be stripped.
+    // Common hop-by-hop headers that should be stripped.
     "host",
     "connection",
     "keep-alive",
@@ -20,15 +20,35 @@ const HEADERS_TO_STRIP: &[&str] = &[
     "transfer-encoding",
     "upgrade",
     // Tailscale specific headers.
-    "tailscale-user-login",
-    "tailscale-user-name",
-    "tailscale-user-profile-pic",
+    "tailscale-.*",
 ];
 
-fn strip_hop_headers(headers: &mut axum::http::HeaderMap) {
-    for name in HEADERS_TO_STRIP {
-        headers.remove(*name);
+static HEADERS_TO_STRIP_SET: std::sync::LazyLock<regex::RegexSet> =
+    std::sync::LazyLock::new(|| {
+        let anchored: Vec<String> = HEADERS_TO_STRIP.iter().map(|p| format!("^{p}$")).collect();
+        regex::RegexSet::new(anchored).expect("header strip patterns should be valid")
+    });
+
+fn strip_hop_headers(mut headers: axum::http::HeaderMap) -> axum::http::HeaderMap {
+    // Extract additional hop-by-hop headers declared in the Connection header.
+    let connection_headers: Vec<axum::http::HeaderName> = headers
+        .get_all("connection")
+        .iter()
+        .flat_map(|value| {
+            value
+                .to_str()
+                .unwrap_or("")
+                .split(',')
+                .filter_map(|s| s.trim().parse().ok())
+        })
+        .collect();
+
+    for name in headers.keys().cloned().collect::<Vec<_>>() {
+        if HEADERS_TO_STRIP_SET.is_match(name.as_str()) || connection_headers.contains(&name) {
+            headers.remove(&name);
+        }
     }
+    headers
 }
 
 pub struct Provider {
@@ -65,8 +85,7 @@ impl Provider {
         let url = self.baseurl.join(path_and_query)?;
 
         let (parts, body) = incoming.into_parts();
-        let mut headers = parts.headers;
-        strip_hop_headers(&mut headers);
+        let headers = strip_hop_headers(parts.headers);
 
         let body = reqwest::Body::wrap_stream(body.into_data_stream());
 
@@ -216,5 +235,38 @@ mod tests {
         // The body is a stream so as_bytes() is None, but we can verify it
         // is present (not None).
         assert!(req.body().is_some());
+    }
+
+    #[test]
+    fn strip_hop_headers_filters_correctly() {
+        let mut headers = axum::http::HeaderMap::new();
+        // Standard hop-by-hop headers.
+        headers.insert("host", "example.com".parse().unwrap());
+        headers.insert("connection", "x-custom-hop".parse().unwrap());
+        headers.insert("transfer-encoding", "chunked".parse().unwrap());
+        headers.insert("upgrade", "websocket".parse().unwrap());
+        // Tailscale headers.
+        headers.insert("tailscale-user-login", "user@example.com".parse().unwrap());
+        headers.insert("tailscale-user-name", "User".parse().unwrap());
+        // Connection-declared header.
+        headers.insert("x-custom-hop", "value".parse().unwrap());
+        // Headers that should be kept.
+        headers.insert("content-type", "application/json".parse().unwrap());
+        headers.insert("x-request-id", "abc123".parse().unwrap());
+
+        let result = strip_hop_headers(headers);
+
+        // Stripped.
+        assert!(result.get("host").is_none());
+        assert!(result.get("connection").is_none());
+        assert!(result.get("transfer-encoding").is_none());
+        assert!(result.get("upgrade").is_none());
+        assert!(result.get("tailscale-user-login").is_none());
+        assert!(result.get("tailscale-user-name").is_none());
+        assert!(result.get("x-custom-hop").is_none());
+
+        // Kept.
+        assert_eq!(result.get("content-type").unwrap(), "application/json");
+        assert_eq!(result.get("x-request-id").unwrap(), "abc123");
     }
 }
