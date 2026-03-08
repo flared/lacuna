@@ -2,10 +2,17 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "lacuna-api",
+      "name": "api",
       "runtimeExecutable": "make",
       "runtimeArgs": ["run"],
       "port": 3000,
+      "autoPort": true
+    },
+    {
+      "name": "frontend",
+      "runtimeExecutable": "make",
+      "runtimeArgs": ["frontend-run"],
+      "port": 5173,
       "autoPort": true
     }
   ]
