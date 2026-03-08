@@ -1,17 +1,7 @@
-pub(crate) mod app;
-mod auth;
-mod config;
-mod handlers;
-mod logging;
-mod metrics;
-mod provider;
-#[cfg(test)]
-mod test_utils;
-mod trace;
-
-use app::AppBuilder;
 use clap::Parser;
-use provider::ProviderManager;
+use lacuna::app::AppBuilder;
+use lacuna::config::Config;
+use lacuna::provider::{Provider, ProviderManager};
 use std::path::PathBuf;
 use tokio::net::TcpListener;
 use tracing::{error, info};
@@ -38,22 +28,22 @@ struct Args {
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
-    let config = config::Config::load(&args.config).unwrap_or_else(|e| {
+    let config = Config::load(&args.config).unwrap_or_else(|e| {
         eprintln!("failed to load config: {e}");
         std::process::exit(1);
     });
     info!(count = config.providers.len(), "loaded providers");
 
-    logging::init(&config.lacuna.logging).unwrap_or_else(|e| {
+    lacuna::logging::init(&config.lacuna.logging).unwrap_or_else(|e| {
         eprintln!("failed to initialize logging: {e}");
         std::process::exit(1);
     });
 
-    metrics::init();
+    lacuna::metrics::init();
 
     let mut manager = ProviderManager::new();
     for (key, provider_config) in &config.providers {
-        let provider = provider::Provider::from_config(key, provider_config).unwrap_or_else(|e| {
+        let provider = Provider::from_config(key, provider_config).unwrap_or_else(|e| {
             error!(provider = %key, %e, "failed to configure provider");
             std::process::exit(1);
         });

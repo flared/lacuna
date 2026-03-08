@@ -12,7 +12,7 @@ ci: \
 	test \
 	format-check \
 	clippy \
-	frontend-ci \
+	frontend-ci
 
 .PHONY: .all
 .all: build test
@@ -28,7 +28,7 @@ run: frontend-build
 	# - https://code.claude.com/docs/en/desktop#port-conflicts
 	ANTHROPIC_API_KEY=$${ANTHROPIC_API_KEY:-} \
 	BEDROCK_API_KEY=$${BEDROCK_API_KEY:-} \
-	    cargo run -- --config example/config.json --port=$${PORT:-3000}
+	    cargo run -- --config examples/lacuna/lacuna.config.json --port=$${PORT:-3000}
 
 .PHONY: fix
 fix:
@@ -105,7 +105,7 @@ docker-run:
 		-it \
 		--rm \
 		-p 3000:3000 \
-		-v ./example/config.json:/opt/lacuna/config.json \
+		-v ./examples/lacuna/lacuna.config.json:/opt/lacuna/config.json \
 		--env=ANTHROPIC_API_KEY=$${ANTHROPIC_API_KEY:-} \
 		--env=BEDROCK_API_KEY=$${BEDROCK_API_KEY:-} \
 		${DOCKER_IMAGE} \

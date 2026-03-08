@@ -57,11 +57,15 @@ pub enum Authorization {
 }
 
 impl Config {
+    pub fn parse(contents: &str) -> Result<Self, anyhow::Error> {
+        let config: Config = json5::from_str(contents)?;
+        Ok(config)
+    }
+
     pub fn load(path: &Path) -> Result<Self, anyhow::Error> {
         let contents = std::fs::read_to_string(path)?;
         let contents = Self::substitute_env_vars(&contents)?;
-        let config: Config = json5::from_str(&contents)?;
-        Ok(config)
+        Self::parse(&contents)
     }
 
     fn substitute_env_vars(input: &str) -> Result<String, anyhow::Error> {
