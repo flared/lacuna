@@ -5,13 +5,17 @@
 Lacuna is an open-source API gateway for AI providers (OpenAI, Anthropic, Bedrock).
 It is meant to be deployed in Tailscale to grant AI API access to all your tailnet members without having to distribute API keys.
 
-## Usage
+## 📋 Changelog
+
+See the [GitHub Releases](https://github.com/Flared/lacuna/releases) page.
+
+## 🚀 Usage
 
 ```
 lacuna --config <path> [--host <host>] [--port <port>]
 ```
 
-## Configuration
+## ⚙️ Configuration
 
 The configuration file defines one or more AI providers in JSON format.
 
@@ -50,23 +54,23 @@ The provided configuration file may include environment variable substitution us
 }
 ```
 
-## Docker Image
+## 🐳 Docker Image
 
 ```
 docker pull ghcr.io/flared/lacuna:latest
 ```
 
-## Using the Gateway
+## 🔌 Using the Gateway
 
 There are usage examples in the [examples directory](examples).
 
-## Dev Dependencies
+## 📦 Dev Dependencies
 
 - cargo: https://doc.rust-lang.org/cargo/getting-started/installation.html
 - cargo-edit: `cargo install cargo-edit`
 - pnpm: https://pnpm.io/installation
 
-## Contributing
+## 🛠️ Contributing
 
 **General**
 - `make ci`: Run CI-equivalent locally.
