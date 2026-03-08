@@ -12,7 +12,7 @@ def main() -> None:
     client = boto3.client(
         service_name="bedrock-runtime",
         region_name="us-east-1",
-        endpoint_url="https://lacuna.tailnet-name.ts.net/bedrock/",
+        endpoint_url="https://lacuna.flare.ts.net/bedrock/",
     )
     model_id = "us.anthropic.claude-opus-4-5-20251101-v1:0"
     payload = {
