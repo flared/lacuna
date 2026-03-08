@@ -56,6 +56,10 @@ The provided configuration file may include environment variable substitution us
 docker pull ghcr.io/flared/lacuna:latest
 ```
 
+## Using the Gateway
+
+There are usage examples in the [examples directory](examples).
+
 ## Dev Dependencies
 
 - cargo: https://doc.rust-lang.org/cargo/getting-started/installation.html

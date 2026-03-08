@@ -6,7 +6,11 @@ on:
       - "main"
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
+
   tests:
     runs-on: ubuntu-latest
     steps:
@@ -24,3 +28,11 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - run: make ci
+
+  tests-examples:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+      - run: make -C examples ci

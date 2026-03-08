@@ -11,10 +11,11 @@ pub enum AuthenticatorError {
     },
 }
 
-pub(super) trait ProviderAuthenticator {
+pub(super) trait ProviderAuthenticator: std::fmt::Debug {
     fn authenticate(&self, request: &mut reqwest::Request) -> Result<(), AuthenticatorError>;
 }
 
+#[derive(Debug)]
 struct NoAuth;
 
 impl ProviderAuthenticator for NoAuth {
@@ -23,6 +24,7 @@ impl ProviderAuthenticator for NoAuth {
     }
 }
 
+#[derive(Debug)]
 struct BearerAuth {
     key: String,
 }
@@ -39,6 +41,7 @@ impl ProviderAuthenticator for BearerAuth {
     }
 }
 
+#[derive(Debug)]
 struct ApiKeyAuth {
     header: reqwest::header::HeaderName,
     key: String,

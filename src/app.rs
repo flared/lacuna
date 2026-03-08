@@ -7,6 +7,7 @@ use crate::handlers;
 use crate::provider::ProviderManager;
 use crate::trace;
 
+#[derive(Debug, Default)]
 pub struct AppBuilder {
     manager: Option<ProviderManager>,
     assets_path: Option<PathBuf>,

@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use super::Provider;
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct ProviderManager {
     providers: HashMap<String, Arc<Provider>>,
 }

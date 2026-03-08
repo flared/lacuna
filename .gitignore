@@ -11,3 +11,8 @@
 /.claude/settings.local.json
 /.claude/worktrees/
 /.claude/skills/
+
+# Examples
+/examples/.ruff_cache
+__pycache__
+*.pyc
