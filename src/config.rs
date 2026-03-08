@@ -12,6 +12,7 @@ pub struct Config {
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Default)]
+#[serde(deny_unknown_fields)]
 pub struct Lacuna {
     #[serde(default)]
     pub logging: crate::logging::Logging,
@@ -188,6 +189,22 @@ mod tests {
             assert_eq!(config.providers["openai"].apikey, "sk-from-env");
             std::fs::remove_dir_all(&dir).unwrap();
         });
+    }
+
+    #[test]
+    fn deny_unknown_fields_in_lacuna() {
+        // The "lacuna" object has no reason to contain unknown fields.
+        // It should always be a mistake.
+        let json = r#"{
+          "lacuna": {
+            "bad-key": "bad-value",
+          },
+        }"#;
+        let err = Config::parse(json).unwrap_err().to_string();
+        assert!(
+            err.contains("unknown field"),
+            "expected error to mention 'unknown field', got: {err}"
+        );
     }
 
     #[test]
