@@ -1,12 +1,11 @@
 pub mod app;
+pub mod auth;
 pub mod config;
+pub mod handlers;
 pub mod logging;
 pub mod metrics;
 pub mod provider;
-
-pub(crate) mod auth;
-pub(crate) mod handlers;
-pub(crate) mod trace;
+pub mod trace;
 
 #[cfg(test)]
-pub(crate) mod test_utils;
+pub mod test_utils;
