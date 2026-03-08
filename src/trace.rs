@@ -10,7 +10,7 @@ use tracing::{Span, info};
 use crate::auth;
 
 #[derive(Debug, Clone)]
-pub(crate) struct LacunaMakeSpan;
+pub struct LacunaMakeSpan;
 
 impl MakeSpan<Body> for LacunaMakeSpan {
     fn make_span(&mut self, request: &Request<Body>) -> Span {
@@ -22,7 +22,7 @@ impl MakeSpan<Body> for LacunaMakeSpan {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct LacunaOnResponse;
+pub struct LacunaOnResponse;
 
 impl OnResponse<Body> for LacunaOnResponse {
     fn on_response(self, response: &Response<Body>, latency: std::time::Duration, _span: &Span) {
