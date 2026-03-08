@@ -85,7 +85,10 @@ impl Provider {
 
         let path_and_query = uri.path_and_query().map(|pq| pq.as_str()).unwrap_or("/");
 
-        let url = self.baseurl.join(path_and_query)?;
+        // Strip the leading '/' so that Url::join resolves the path relative
+        // to the base URL path instead of replacing it (RFC 3986 behaviour).
+        let relative = path_and_query.strip_prefix('/').unwrap_or(path_and_query);
+        let url = self.baseurl.join(relative)?;
 
         let (parts, body) = incoming.into_parts();
         let headers = strip_hop_headers(parts.headers);
@@ -152,6 +155,26 @@ mod tests {
             .build_request(incoming_request("GET", "/v1/messages", Body::empty()))
             .unwrap();
         assert_eq!(req.url().as_str(), "https://api.anthropic.com/v1/messages");
+    }
+
+    #[tokio::test]
+    async fn preserves_base_url_path() {
+        let provider = test_provider(
+            "https://openrouter.ai/api/",
+            config::Authorization::None,
+            "",
+        );
+        let req = provider
+            .build_request(incoming_request(
+                "GET",
+                "/v1/chat/completions",
+                Body::empty(),
+            ))
+            .unwrap();
+        assert_eq!(
+            req.url().as_str(),
+            "https://openrouter.ai/api/v1/chat/completions"
+        );
     }
 
     #[tokio::test]
