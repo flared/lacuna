@@ -10,7 +10,7 @@ from anthropic.types import TextBlock
 
 def main() -> None:
     client = anthropic.Anthropic(
-        base_url="https://lacuna.tailnet-name.ts.net/",
+        base_url="https://lacuna.flare.ts.net/anthropic/",
         api_key="-",
     )
     response = client.messages.create(

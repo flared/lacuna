@@ -1,0 +1,8 @@
+{
+  "env": {
+    "ANTHROPIC_MODEL": "us.anthropic.claude-opus-4-6-v1",
+    "ANTHROPIC_BEDROCK_BASE_URL": "https://lacuna.flare.ts.net/bedrock/",
+    "CLAUDE_CODE_USE_BEDROCK": "1",
+    "CLAUDE_CODE_SKIP_BEDROCK_AUTH": "1"
+  }
+}
