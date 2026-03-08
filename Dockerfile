@@ -1,6 +1,6 @@
 FROM rust:1-alpine AS api-builder
 WORKDIR /build
-COPY Cargo.toml Cargo.lock ./
+COPY LICENSE Cargo.toml Cargo.lock ./
 COPY src ./src
 RUN cargo build --release
 

@@ -12,18 +12,18 @@ const { data, isLoading, error } = useInfo();
         <v-alert v-else-if="error" type="error">{{ error.message }}</v-alert>
         <div v-else>
           <p>
-            <span class="font-weight-bold">Project Page:</span>
+            Project Page:
             <a href="https://github.com/Flared/lacuna" target="_blank" rel="noopener noreferrer">
               Flared/lacuna
             </a>
             <v-icon icon="mdi-github" size="small" />
           </p>
-          <p class="mt-4">
-            <span class="font-weight-bold">Version:</span>
+          <p>
+            Version:
             {{ data?.version }}
           </p>
-          <h3 class="mt-4 font-weight-bold">License</h3>
-          <pre class="mt-2 text-caption" style="white-space: pre-wrap">{{ data?.license }}</pre>
+          <h3>License</h3>
+          <pre>{{ data?.license }}</pre>
         </div>
       </v-card-text>
     </v-card>

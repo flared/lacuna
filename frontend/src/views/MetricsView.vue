@@ -10,7 +10,7 @@ const { data, isLoading, error } = useMetrics();
       <v-card-text>
         <v-progress-circular v-if="isLoading" indeterminate />
         <v-alert v-else-if="error" type="error">{{ error.message }}</v-alert>
-        <pre v-else class="text-body-2">{{ data }}</pre>
+        <pre v-else>{{ data }}</pre>
       </v-card-text>
     </v-card>
   </v-container>
