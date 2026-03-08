@@ -4,13 +4,12 @@ COPY Cargo.toml Cargo.lock ./
 COPY src ./src
 RUN cargo build --release
 
-FROM node:24-alpine AS frontend-builder
-RUN corepack enable pnpm
+FROM oven/bun:1 AS frontend-builder
 WORKDIR /build/frontend
-COPY frontend/package.json frontend/pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
+COPY frontend/package.json frontend/bun.lock ./
+RUN bun install --frozen-lockfile
 COPY frontend/ ./
-RUN pnpm run build
+RUN bun run build
 
 FROM alpine:latest
 COPY --from=api-builder /build/target/release/lacuna /usr/local/bin/lacuna

@@ -58,9 +58,9 @@ docker pull ghcr.io/flared/lacuna:latest
 
 ## Dev Dependencies
 
-- cargo
+- cargo: https://doc.rust-lang.org/cargo/getting-started/installation.html
 - cargo-edit: `cargo install cargo-edit`
-- pnpm
+- bun: https://bun.com/
 
 ## Contributing
 

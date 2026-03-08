@@ -4,12 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "bunx --bun vite",
     "check": "vue-tsc --build",
-    "build": "pnpm run check && vite build",
-    "preview": "vite preview",
-    "format": "prettier --write 'src/**/*.{ts,vue}'",
-    "format-check": "prettier --check 'src/**/*.{ts,vue}'"
+    "build": "pnpm run check && bunx --bun vite build",
+    "preview": "bunx --bun vite preview",
+    "format": "oxfmt src/ && oxlint --fix src/",
+    "format-check": "oxfmt --check src/ && oxlint src/"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.2.1",
@@ -23,8 +23,8 @@
   "devDependencies": {
     "@types/node": "^25.3.5",
     "@vitejs/plugin-vue": "^6.0.4",
-    "prettier": "^3.8.1",
-    "prettier-plugin-tailwindcss": "^0.7.2",
+    "oxfmt": "^0",
+    "oxlint": "^1",
     "typescript": "^5.9.3",
     "vite": "^7.3.1",
     "vue-tsc": "^3.2.5"
