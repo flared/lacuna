@@ -22,7 +22,7 @@ mod tests {
     async fn test_ui_index() {
         let response = crate::app::AppBuilder::new()
             .build()
-            .oneshot(Request::builder().uri("/ui").body(Body::empty()).unwrap())
+            .oneshot(Request::builder().uri("/ui/").body(Body::empty()).unwrap())
             .await
             .unwrap();
 
@@ -44,6 +44,6 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::PERMANENT_REDIRECT);
-        assert_eq!(response.headers().get("location").unwrap(), "/ui");
+        assert_eq!(response.headers().get("location").unwrap(), "/ui/");
     }
 }
