@@ -3,8 +3,10 @@ import TopBar from "@/components/TopBar.vue";
 </script>
 
 <template>
-  <div class="min-h-screen bg-background text-text">
+  <v-app>
     <TopBar />
-    <router-view />
-  </div>
+    <v-main>
+      <router-view />
+    </v-main>
+  </v-app>
 </template>

@@ -1,18 +1,24 @@
-import { library } from "@fortawesome/fontawesome-svg-core";
-import { fab } from "@fortawesome/free-brands-svg-icons";
-import { far } from "@fortawesome/free-regular-svg-icons";
-import { fas } from "@fortawesome/free-solid-svg-icons";
-import { FontAwesomeIcon } from "@fortawesome/vue-fontawesome";
-import { VueQueryPlugin } from "@tanstack/vue-query";
 import { createApp } from "vue";
+import { createVuetify } from "vuetify";
+import { VueQueryPlugin } from "@tanstack/vue-query";
+import "@mdi/font/css/materialdesignicons.css";
 import App from "@/App.vue";
 import router from "@/router";
 import "@/theme.css";
 
-library.add(fas, far, fab);
+const vuetify = createVuetify({
+  theme: {
+    defaultTheme: "light",
+    themes: {
+      light: {
+        colors: {
+          primary: "#2563eb",
+          background: "#f1f5f9",
+          surface: "#ffffff",
+        },
+      },
+    },
+  },
+});
 
-createApp(App)
-  .component("font-awesome-icon", FontAwesomeIcon)
-  .use(router)
-  .use(VueQueryPlugin)
-  .mount("#app");
+createApp(App).use(router).use(VueQueryPlugin).use(vuetify).mount("#app");

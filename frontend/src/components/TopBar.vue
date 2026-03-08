@@ -1,20 +1,19 @@
 <script setup lang="ts">
-import { RouterLink } from "vue-router";
+const items = [
+  { title: "Configuration", to: "/" },
+  { title: "Metrics", to: "/metrics" },
+  { title: "About", to: "/about" },
+];
 </script>
 
 <template>
-  <nav class="bg-primary px-6 py-3 shadow-sm">
-    <div class="flex items-center gap-6">
-      <RouterLink to="/" class="text-lg font-semibold text-white"> Lacuna </RouterLink>
-      <div class="flex gap-4">
-        <RouterLink to="/" class="text-sm text-white/70 hover:text-white">
-          Configuration
-        </RouterLink>
-        <RouterLink to="/metrics" class="text-sm text-white/70 hover:text-white">
-          Metrics
-        </RouterLink>
-        <RouterLink to="/about" class="text-sm text-white/70 hover:text-white"> About </RouterLink>
-      </div>
-    </div>
-  </nav>
+  <v-app-bar color="primary">
+    <v-toolbar-title style="flex: 0 0 auto; margin-right: 16px" class="font-weight-bold text-white">
+      Lacuna
+    </v-toolbar-title>
+    <v-btn v-for="item in items" :key="item.to" :to="item.to" variant="text">
+      {{ item.title }}
+    </v-btn>
+    <v-spacer />
+  </v-app-bar>
 </template>
