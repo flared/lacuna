@@ -1,7 +1,7 @@
 node_modules: bun.lock
 	rm -rf node_modules && bun install --frozen-lockfile
 
-SRC_FILES := $(shell find src -type f) index.html pnpm-lock.yaml vite.config.ts tsconfig.json
+SRC_FILES := $(shell find src -type f) index.html bun.lock vite.config.ts tsconfig.json
 
 .PHONY: clean
 clean:
