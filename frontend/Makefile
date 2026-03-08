@@ -3,6 +3,9 @@ node_modules: pnpm-lock.yaml
 
 SRC_FILES := $(shell find src -type f) index.html pnpm-lock.yaml vite.config.ts tsconfig.json
 
+.PHONY: ci
+ci: build check format-check
+
 .PHONY: clean
 clean:
 	rm -rf node_modules dist .vite

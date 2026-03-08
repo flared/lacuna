@@ -12,8 +12,7 @@ ci: \
 	test \
 	format-check \
 	clippy \
-	frontend-check \
-	frontend-format-check
+	frontend-ci \
 
 .PHONY: .all
 .all: build test
@@ -86,6 +85,10 @@ frontend-run:
 .PHONY: frontend-clean
 frontend-clean:
 	$(MAKE) -C frontend clean
+
+.PHONY: frontend-ci
+frontend-ci:
+		$(MAKE) -C frontend ci
 
 ###################
 ## DOCKER TARGETS #
