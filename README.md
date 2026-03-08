@@ -56,6 +56,8 @@ The provided configuration file may include environment variable substitution us
 
 ## 🐳 Docker Image
 
+Docker images are published at [ghcr.io/flared/lacuna](https://github.com/Flared/lacuna/pkgs/container/lacuna):
+
 ```
 docker pull ghcr.io/flared/lacuna:latest
 ```
