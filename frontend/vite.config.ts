@@ -11,6 +11,10 @@ export default defineConfig({
     },
   },
   server: {
+   	// NOTE(aviau): Claude Desktop's preview mode passes the PORT environment
+    // variable when the default port is not available:
+    // - https://code.claude.com/docs/en/desktop#port-conflicts
+    port: parseInt(process.env.PORT || "5173"),
     proxy: {
       "^(?!/ui)": "http://localhost:3000",
     },
