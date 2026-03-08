@@ -1,12 +1,10 @@
 <script setup lang="ts">
-import { useConfig } from "@/composables/config";
-
-const { data, isLoading, error } = useConfig();
+import TopBar from "@/components/TopBar.vue";
 </script>
 
 <template>
-  <h1>Lacuna</h1>
-  <pre v-if="isLoading">Loading...</pre>
-  <pre v-else-if="error">Error: {{ error.message }}</pre>
-  <pre v-else>{{ JSON.stringify(data, null, 2) }}</pre>
+  <div class="min-h-screen bg-background text-text">
+    <TopBar />
+    <router-view />
+  </div>
 </template>

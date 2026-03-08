@@ -47,8 +47,8 @@ impl AppBuilder {
             .route("/health", get(handlers::health::health))
             .route("/metrics", get(handlers::metrics::handler))
             .nest("/api", handlers::api::router())
-            .nest("/ui", handlers::ui::router(&assets_path))
-            .route("/", get(|| async { Redirect::permanent("/ui") }));
+            .nest("/ui/", handlers::ui::router(&assets_path))
+            .route("/", get(|| async { Redirect::permanent("/ui/") }));
 
         for (name, provider) in manager.iter() {
             let provider_router = Router::new()
