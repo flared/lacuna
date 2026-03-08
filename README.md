@@ -60,7 +60,7 @@ docker pull ghcr.io/flared/lacuna:latest
 
 - cargo: https://doc.rust-lang.org/cargo/getting-started/installation.html
 - cargo-edit: `cargo install cargo-edit`
-- bun: https://bun.com/
+- pnpm: https://pnpm.io/installation
 
 ## Contributing
 
