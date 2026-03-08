@@ -13,6 +13,7 @@ import { RouterLink } from "vue-router";
         <RouterLink to="/metrics" class="text-sm text-white/70 hover:text-white">
           Metrics
         </RouterLink>
+        <RouterLink to="/about" class="text-sm text-white/70 hover:text-white"> About </RouterLink>
       </div>
     </div>
   </nav>
