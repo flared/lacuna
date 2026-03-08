@@ -1,5 +1,4 @@
 import { fileURLToPath, URL } from "node:url";
-import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 import vuetify from "vite-plugin-vuetify";
@@ -7,7 +6,6 @@ import vuetify from "vite-plugin-vuetify";
 export default defineConfig({
   base: "/ui/",
   plugins: [
-    tailwindcss(),
     vue(),
     vuetify(),
   ],
