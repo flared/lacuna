@@ -74,9 +74,9 @@ frontend-check:
 frontend-format:
 	$(MAKE) -C frontend format
 
-.PHONY: frontend-format-check
-frontend-format-check:
-	$(MAKE) -C frontend format-check
+.PHONY: frontend-lint
+frontend-lint:
+	$(MAKE) -C frontend lint
 
 .PHONY: frontend-run
 frontend-run:
