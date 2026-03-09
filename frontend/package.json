@@ -8,8 +8,8 @@
     "check": "vue-tsc --build",
     "build": "pnpm run check && vite build",
     "preview": "vite preview",
-    "format": "oxfmt src/",
-    "format-check": "oxfmt --check src/"
+    "format": "oxfmt src/ && eslint --fix src/",
+    "lint": "oxfmt --check src/ && eslint src/"
   },
   "dependencies": {
     "@mdi/font": "^7.4.47",
@@ -23,6 +23,8 @@
   "devDependencies": {
     "@types/node": "^25.3.5",
     "@vitejs/plugin-vue": "^6.0.4",
+    "eslint": "^10.0.3",
+    "eslint-plugin-vue": "^10.8.0",
     "oxfmt": "^0.36.0",
     "typescript": "^5.9.3",
     "vite": "^7.3.1",

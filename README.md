@@ -98,4 +98,5 @@ The provided configuration file may include environment variable substitution us
 **Frontend Targets**
 - `make frontend-build`: Build the frontend.
 - `make frontend-format`: Format the frontend.
+- `make frontend-lint`: Lint the frontend.
 - `make frontend-run`: Serve the frontend with auto-reload using Vite. You must also have the backend running.

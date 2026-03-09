@@ -4,7 +4,7 @@ node_modules: pnpm-lock.yaml
 SRC_FILES := $(shell find src -type f) index.html pnpm-lock.yaml vite.config.ts tsconfig.json
 
 .PHONY: ci
-ci: build check format-check
+ci: build check lint
 
 .PHONY: clean
 clean:
@@ -25,9 +25,9 @@ build: dist/.build-stamp
 format: node_modules
 	pnpm run format
 
-.PHONY: format-check
-format-check: node_modules
-	pnpm run format-check
+.PHONY: lint
+lint: node_modules
+	pnpm run lint
 
 .PHONY: run
 run: node_modules
