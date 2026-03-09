@@ -2,6 +2,7 @@ use anyhow::Context;
 use lacuna::config::Config;
 use std::fs;
 use std::path::Path;
+use std::str::FromStr;
 
 #[test]
 fn examples_configs_are_valid() -> Result<(), anyhow::Error> {
@@ -16,7 +17,8 @@ fn examples_configs_are_valid() -> Result<(), anyhow::Error> {
         let path = entry?;
         let contents = fs::read_to_string(&path)
             .with_context(|| format!("failed to read {}", path.display()))?;
-        Config::parse(&contents).with_context(|| format!("failed to parse {}", path.display()))?;
+        Config::from_str(&contents)
+            .with_context(|| format!("failed to parse {}", path.display()))?;
     }
 
     Ok(())

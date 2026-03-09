@@ -1,46 +1,47 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Default)]
 #[serde(deny_unknown_fields)]
 pub struct Logging {
-    #[serde(default = "Logging::default_format")]
     pub format: LogFormat,
-
-    #[serde(default = "Logging::default_level")]
-    pub level: String,
+    pub level: LogLevel,
 }
 
-impl Default for Logging {
-    fn default() -> Self {
-        Self {
-            format: Self::default_format(),
-            level: Self::default_level(),
-        }
-    }
-}
-
-impl Logging {
-    fn default_format() -> LogFormat {
-        LogFormat::Console
-    }
-
-    fn default_level() -> String {
-        "info".to_owned()
-    }
-}
-
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Default, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum LogFormat {
+    #[default]
     Console,
     Json,
 }
 
-pub fn init(logging: &Logging) -> Result<(), anyhow::Error> {
-    use tracing_subscriber::{EnvFilter, fmt, prelude::*};
+#[derive(Debug, Default, Deserialize, Serialize, PartialEq, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+pub enum LogLevel {
+    Error,
+    Warn,
+    #[default]
+    Info,
+    Debug,
+    Trace,
+}
 
-    let filter = EnvFilter::try_new(&logging.level)
-        .map_err(|e| anyhow::anyhow!("invalid log level '{}': {e}", logging.level))?;
+impl From<LogLevel> for tracing::Level {
+    fn from(level: LogLevel) -> Self {
+        match level {
+            LogLevel::Error => Self::ERROR,
+            LogLevel::Warn => Self::WARN,
+            LogLevel::Info => Self::INFO,
+            LogLevel::Debug => Self::DEBUG,
+            LogLevel::Trace => Self::TRACE,
+        }
+    }
+}
+
+pub fn init(logging: &Logging) -> anyhow::Result<()> {
+    use tracing_subscriber::{filter::LevelFilter, fmt, prelude::*};
+
+    let filter = LevelFilter::from_level(logging.level.into());
 
     let registry = tracing_subscriber::registry().with(filter);
 
