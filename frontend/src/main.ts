@@ -17,6 +17,14 @@ const vuetify = createVuetify({
           surface: "#ffffff",
         },
       },
+      dark: {
+        dark: true,
+        colors: {
+          primary: "#2563eb",
+          background: "#121212",
+          surface: "#1e1e1e",
+        },
+      },
     },
   },
 });
