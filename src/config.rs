@@ -2,48 +2,30 @@ pub use crate::provider::compatibility::Compatibility;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
+use std::str::FromStr;
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub struct Config {
-    #[serde(default)]
     pub lacuna: Lacuna,
-
     pub providers: HashMap<String, Provider>,
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Default)]
 #[serde(deny_unknown_fields)]
 pub struct Lacuna {
-    #[serde(default)]
     pub logging: crate::logging::Logging,
-
-    #[serde(default)]
     pub identity_header: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub struct Provider {
-    #[serde(default)]
     pub name: String,
-
-    #[serde(default)]
     pub description: String,
-
     pub baseurl: String,
-
-    #[serde(default)]
     pub models: Vec<String>,
-
-    #[serde(default)]
     pub apikey: String,
-
-    #[serde(default)]
     pub authorization: Authorization,
-
-    #[serde(default)]
     pub tailnet: bool,
-
-    #[serde(default)]
     pub compatibility: Compatibility,
 }
 
@@ -57,16 +39,20 @@ pub enum Authorization {
     XGoogApiKey,
 }
 
-impl Config {
-    pub fn parse(contents: &str) -> Result<Self, anyhow::Error> {
-        let config: Config = json5::from_str(contents)?;
+impl FromStr for Config {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let config: Config = json5::from_str(s)?;
         Ok(config)
     }
+}
 
+impl Config {
     pub fn load(path: &Path) -> Result<Self, anyhow::Error> {
         let contents = std::fs::read_to_string(path)?;
         let contents = Self::substitute_env_vars(&contents)?;
-        Self::parse(&contents)
+        contents.parse()
     }
 
     fn substitute_env_vars(input: &str) -> Result<String, anyhow::Error> {
@@ -200,7 +186,7 @@ mod tests {
             "bad-key": "bad-value",
           },
         }"#;
-        let err = Config::parse(json).unwrap_err().to_string();
+        let err = Config::from_str(json).unwrap_err().to_string();
         assert!(
             err.contains("unknown field"),
             "expected error to mention 'unknown field', got: {err}"
@@ -304,5 +290,22 @@ mod tests {
         let serialized = serde_json::to_string(&config).unwrap();
         let roundtripped: Config = json5::from_str(&serialized).unwrap();
         assert_eq!(config, roundtripped);
+    }
+
+    #[test]
+    fn bad_log_level_is_rejected() {
+        let json = r#"{
+          "lacuna": {
+            "logging": {
+              "level": "superverbose"
+            }
+          },
+          "providers": {}
+        }"#;
+        let err = Config::from_str(json).unwrap_err().to_string();
+        assert!(
+            err.contains("superverbose"),
+            "expected error to mention the invalid value, got: {err}"
+        );
     }
 }

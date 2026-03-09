@@ -1,0 +1,21 @@
+{
+    "lacuna": {
+        "logging": {
+            "format": "console",
+            "level": "info"
+        }
+    },
+    "providers": {
+        "openai": {
+            "name": "OpenAI",
+            "baseurl": "https://api.openai.com/v1",
+            "authorization": "bearer",
+            "apikey": "sk-example",
+            "models": ["gpt-4o", "gpt-4o-mini"],
+            "compatibility": {
+                "openai_chat": true,
+                "openai_responses": true
+            }
+        }
+    }
+}

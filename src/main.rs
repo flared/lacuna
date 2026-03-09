@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use tokio::net::TcpListener;
 use tracing::{error, info};
 
+/// An LLM API gateway and proxy
 #[derive(Parser)]
 struct Args {
     /// Path to the providers config file (YAML or JSON)
