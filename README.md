@@ -2,8 +2,16 @@
 
 *Lacuna fills the gap between your tailnet users and the AI providers.*
 
-Lacuna is an open-source API gateway for AI providers (OpenAI, Anthropic, Bedrock).
-It is meant to be deployed in Tailscale to grant AI API access to all your tailnet members without having to distribute API keys.
+Lacuna is a free and open-source API gateway for AI providers.
+It is meant to be deployed in Tailscale to grant AI API access to your tailnet members without having to distribute API keys.
+
+## ✨ Features
+
+- **Supported Providers**: OpenAI, Anthropic, Bedrock, Gemini.
+- **Automatic Routing**: Routes requests to the first compatible provider based on which endpoint is called. For example, calls to `/v1/chat/completions` are automatically routed to the first OpenAI-compatible provider.
+- **Provider-Specific Routing**: Dedicated base URL for each provider. For example, calls to `/myprovider/v1/chat/completions` will always route requests to `myprovider`.
+- **Prometheus Metrics**: Exposes Prometheus metrics at `/metrics` for usage monitoring. Includes per-user metrics.
+- **Web Interface**: Minimal web interface that displays configured providers.
 
 ## 📋 Changelog
 
@@ -13,6 +21,18 @@ See the [GitHub Releases](https://github.com/Flared/lacuna/releases) page.
 
 ```
 lacuna --config <path> [--host <host>] [--port <port>]
+```
+
+## 🔌 Using the Gateway
+
+There are usage examples in the [examples directory](examples).
+
+## 🐳 Docker Image
+
+Docker images are published at [ghcr.io/flared/lacuna](https://github.com/Flared/lacuna/pkgs/container/lacuna):
+
+```
+docker pull ghcr.io/flared/lacuna:latest
 ```
 
 ## ⚙️ Configuration
@@ -53,18 +73,6 @@ The provided configuration file may include environment variable substitution us
   }
 }
 ```
-
-## 🐳 Docker Image
-
-Docker images are published at [ghcr.io/flared/lacuna](https://github.com/Flared/lacuna/pkgs/container/lacuna):
-
-```
-docker pull ghcr.io/flared/lacuna:latest
-```
-
-## 🔌 Using the Gateway
-
-There are usage examples in the [examples directory](examples).
 
 ## 📦 Dev Dependencies
 
