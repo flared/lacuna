@@ -23,7 +23,7 @@ pub struct Compatibility {
 impl Compatibility {
     pub fn is_compatible(&self, path: &str) -> bool {
         match api_type_for_path(path) {
-            Some(ApiType::OpenAiChat) => self.openai_chat,
+            Some(ApiType::OpenAiChatCompletion) => self.openai_chat,
             Some(ApiType::OpenAiResponses) => self.openai_responses,
             Some(ApiType::AnthropicMessages) => self.anthropic_messages,
             Some(ApiType::GeminiGenerateContent) => self.gemini_generate_content,

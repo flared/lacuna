@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::auth;
-use crate::handlers;
+use crate::http_handlers;
 use crate::provider::ProviderManager;
 use crate::trace;
 
@@ -45,22 +45,22 @@ impl AppBuilder {
             .unwrap_or_else(|| PathBuf::from("frontend/dist"));
 
         let mut router = Router::new()
-            .route("/health", get(handlers::health::health))
-            .route("/metrics", get(handlers::metrics::handler))
-            .nest("/api", handlers::api::router())
-            .nest("/ui/", handlers::ui::router(&assets_path))
+            .route("/health", get(http_handlers::health::health))
+            .route("/metrics", get(http_handlers::metrics::handler))
+            .nest("/api", http_handlers::api::router())
+            .nest("/ui/", http_handlers::ui::router(&assets_path))
             .route("/", get(|| async { Redirect::permanent("/ui/") }));
 
         for (name, provider) in manager.iter() {
             let provider_router = Router::new()
-                .fallback(handlers::proxy::provider_proxy_handler)
+                .fallback(http_handlers::proxy::provider_proxy_handler)
                 .with_state(Arc::clone(provider));
             router = router.nest(&format!("/{name}"), provider_router);
         }
 
         let manager = Arc::new(manager);
         let mut router = router
-            .fallback(handlers::proxy::proxy_handler)
+            .fallback(http_handlers::proxy::proxy_handler)
             .with_state(manager)
             .layer(trace::layer());
 

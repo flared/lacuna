@@ -2,12 +2,17 @@ use axum::body::Body;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
+use bytes::Bytes;
 use std::sync::Arc;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
+
+use crate::api_type::{ApiTypeHandler, api_type_for_path};
 
 use crate::auth;
+use crate::inspecting_stream::InspectingStream;
 use crate::metrics;
 use crate::provider::{self, ProviderManager};
+use crate::request_metadata::RequestMetadata;
 
 async fn forward_to_provider(
     provider: &provider::Provider,
@@ -16,7 +21,19 @@ async fn forward_to_provider(
     let method = request.method().to_owned();
     let path = request.uri().path().to_owned();
     let user = auth::get_caller_identity(&request).unwrap_or_default();
-    metrics::record_request(&provider.key, &user);
+    let api_type_handler = api_type_for_path(&path).map(|t| t.handler());
+    let api_type_handler_id = api_type_handler
+        .as_ref()
+        .map(|h| h.id().to_owned())
+        .unwrap_or_default();
+
+    let request_metadata = RequestMetadata {
+        provider_key: provider.key.clone(),
+        api_handler_id: api_type_handler_id,
+        user_identity: user,
+    };
+
+    metrics::record_request(&request_metadata);
     debug!(%method, %path, "downstream_req");
 
     let upstream_req = match provider.build_request(request) {
@@ -43,11 +60,17 @@ async fn forward_to_provider(
 
     let status = upstream_res.status();
     let headers = upstream_res.headers().clone();
-    let body = Body::from_stream(upstream_res.bytes_stream());
+    let status_code = status.as_u16();
 
     info!(%method, %path, %status, "upstream_resp");
 
-    let mut builder = Response::builder().status(status.as_u16());
+    let stream = InspectingStream::new(upstream_res.bytes_stream(), move |body: Bytes| {
+        on_response_stream_complete(body, status_code, api_type_handler, &request_metadata);
+    });
+
+    let body = Body::from_stream(stream);
+
+    let mut builder = Response::builder().status(status_code);
     for (name, value) in headers.iter() {
         builder = builder.header(name, value);
     }
@@ -71,6 +94,33 @@ pub async fn proxy_handler(
         None => return (StatusCode::NOT_FOUND, "no provider found for path").into_response(),
     };
     forward_to_provider(provider, request).await
+}
+
+fn on_response_stream_complete(
+    body: Bytes,
+    status_code: u16,
+    api_type_handler: Option<Box<dyn ApiTypeHandler + Send>>,
+    request_metadata: &RequestMetadata,
+) {
+    let api_type_handler = match api_type_handler {
+        Some(handler) => handler,
+        None => return,
+    };
+    let response = match http::Response::builder().status(status_code).body(body) {
+        Ok(r) => r,
+        Err(e) => {
+            warn!("Failed to build response: {e}");
+            return;
+        }
+    };
+    let response_metadata = match api_type_handler.inspect_response(&response) {
+        Ok(metadata) => metadata,
+        Err(e) => {
+            warn!("Failed to inspect response: {e}");
+            return;
+        }
+    };
+    metrics::record_response(request_metadata, &response_metadata);
 }
 
 #[cfg(test)]
