@@ -31,9 +31,14 @@ pub fn record_response(request_metadata: &RequestMetadata, response_metadata: &R
         ("user", request_metadata.user_identity.clone()),
     ];
     if let Some(tokens) = response_metadata.input_tokens {
-        metrics::counter!("lacuna_provider_input_tokens_total", &labels).increment(tokens);
+        metrics::counter!("lacuna_provider_tokens_input_total", &labels).increment(tokens);
     }
     if let Some(tokens) = response_metadata.output_tokens {
-        metrics::counter!("lacuna_provider_output_tokens_total", &labels).increment(tokens);
+        metrics::counter!("lacuna_provider_tokens_output_total", &labels).increment(tokens);
+    }
+    let total_tokens =
+        response_metadata.input_tokens.unwrap_or(0) + response_metadata.output_tokens.unwrap_or(0);
+    if total_tokens > 0 {
+        metrics::counter!("lacuna_provider_tokens_total", &labels).increment(total_tokens);
     }
 }
