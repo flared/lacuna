@@ -20,7 +20,7 @@ async fn forward_to_provider(
 ) -> Response {
     let method = request.method().to_owned();
     let path = request.uri().path().to_owned();
-    let user = auth::get_caller_identity(&request).unwrap_or_default();
+    let user = auth::get_caller_identity(&request);
     let api_type_handler = api_type_for_path(&path).map(|t| t.handler());
     let api_type_handler_id = api_type_handler
         .as_ref()

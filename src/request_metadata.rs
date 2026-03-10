@@ -8,5 +8,5 @@ pub struct ResponseMetadata {
 pub struct RequestMetadata {
     pub provider_key: String,
     pub api_handler_id: String,
-    pub user_identity: String,
+    pub user_identity: Option<String>,
 }
