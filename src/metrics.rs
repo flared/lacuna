@@ -1,3 +1,4 @@
+use crate::request_metadata::{RequestMetadata, ResponseMetadata};
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use std::sync::LazyLock;
 
@@ -15,7 +16,24 @@ pub fn render() -> String {
     PROMETHEUS_HANDLE.render()
 }
 
-pub fn record_request(provider: &str, user: &str) {
-    let labels = [("provider", provider.to_owned()), ("user", user.to_owned())];
+pub fn record_request(request_metadata: &RequestMetadata) {
+    let labels = [
+        ("provider", request_metadata.provider_key.clone()),
+        ("user", request_metadata.user_identity.clone()),
+    ];
     metrics::counter!("lacuna_provider_requests_total", &labels).increment(1);
+}
+
+pub fn record_response(request_metadata: &RequestMetadata, response_metadata: &ResponseMetadata) {
+    let labels = [
+        ("provider", request_metadata.provider_key.clone()),
+        ("handler", request_metadata.api_handler_id.clone()),
+        ("user", request_metadata.user_identity.clone()),
+    ];
+    if let Some(tokens) = response_metadata.input_tokens {
+        metrics::counter!("lacuna_provider_input_tokens_total", &labels).increment(tokens);
+    }
+    if let Some(tokens) = response_metadata.output_tokens {
+        metrics::counter!("lacuna_provider_output_tokens_total", &labels).increment(tokens);
+    }
 }

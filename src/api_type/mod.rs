@@ -7,9 +7,11 @@ mod openai;
 use regex::Regex;
 use std::sync::LazyLock;
 
+pub use crate::request_metadata::ResponseMetadata;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum ApiType {
-    OpenAiChat,
+    OpenAiChatCompletion,
     OpenAiResponses,
     AnthropicMessages,
     GeminiGenerateContent,
@@ -19,13 +21,17 @@ pub enum ApiType {
 }
 
 pub trait ApiTypeHandler {
-    fn name(&self) -> &'static str;
+    fn id(&self) -> &'static str;
+    fn inspect_response(
+        &self,
+        response: &http::Response<bytes::Bytes>,
+    ) -> Result<ResponseMetadata, anyhow::Error>;
 }
 
 impl ApiType {
-    pub fn handler(&self) -> Box<dyn ApiTypeHandler> {
+    pub fn handler(&self) -> Box<dyn ApiTypeHandler + Send> {
         match self {
-            ApiType::OpenAiChat => Box::new(openai::OpenAiChatHandler),
+            ApiType::OpenAiChatCompletion => Box::new(openai::OpenAiChatCompletionHandler),
             ApiType::OpenAiResponses => Box::new(openai::OpenAiResponsesHandler),
             ApiType::AnthropicMessages => Box::new(anthropic::AnthropicMessagesHandler),
             ApiType::GeminiGenerateContent => Box::new(gemini::GeminiGenerateContentHandler),
@@ -53,7 +59,7 @@ static RE_GEMINI_GENERATE_CONTENT: LazyLock<Regex> =
 
 pub fn api_type_for_path(path: &str) -> Option<ApiType> {
     if RE_OPENAI_CHAT.is_match(path) {
-        Some(ApiType::OpenAiChat)
+        Some(ApiType::OpenAiChatCompletion)
     } else if RE_OPENAI_RESPONSES.is_match(path) {
         Some(ApiType::OpenAiResponses)
     } else if RE_ANTHROPIC_MESSAGES.is_match(path) {
@@ -79,10 +85,10 @@ mod tests {
     fn api_type_for_path_cases() {
         let cases: Vec<(&str, Option<ApiType>)> = vec![
             // OpenAI Chat
-            ("/v1/chat/completions", Some(ApiType::OpenAiChat)),
+            ("/v1/chat/completions", Some(ApiType::OpenAiChatCompletion)),
             (
                 "/v1/chat/completions?stream=true",
-                Some(ApiType::OpenAiChat),
+                Some(ApiType::OpenAiChatCompletion),
             ),
             // OpenAI Responses
             ("/v1/responses", Some(ApiType::OpenAiResponses)),
@@ -121,18 +127,19 @@ mod tests {
     }
 
     #[test]
-    fn handler_names() {
+    fn handler_ids() {
+        // All handlers should have a unique id.
         let cases: Vec<(ApiType, &str)> = vec![
-            (ApiType::OpenAiChat, "OpenAI Chat"),
-            (ApiType::OpenAiResponses, "OpenAI Responses"),
-            (ApiType::AnthropicMessages, "Anthropic Messages"),
-            (ApiType::GeminiGenerateContent, "Gemini Generate Content"),
-            (ApiType::BedrockModelInvoke, "Bedrock Model Invoke"),
-            (ApiType::GoogleGenerateContent, "Google Generate Content"),
-            (ApiType::GoogleRawPredict, "Google Raw Predict"),
+            (ApiType::OpenAiChatCompletion, "openai_chat_completion"),
+            (ApiType::OpenAiResponses, "openai_responses"),
+            (ApiType::AnthropicMessages, "anthropic_messages"),
+            (ApiType::GeminiGenerateContent, "gemini_generate_content"),
+            (ApiType::BedrockModelInvoke, "bedrock_model_invoke"),
+            (ApiType::GoogleGenerateContent, "google_generate_content"),
+            (ApiType::GoogleRawPredict, "google_raw_predict"),
         ];
         for (api_type, expected_name) in cases {
-            assert_eq!(api_type.handler().name(), expected_name, "{api_type:?}");
+            assert_eq!(api_type.handler().id(), expected_name, "{api_type:?}");
         }
     }
 }

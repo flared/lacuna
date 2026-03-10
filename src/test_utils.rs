@@ -1,8 +1,16 @@
 use axum::Router;
+use bytes::Bytes;
 use tokio::net::TcpListener;
 
 use crate::config;
 use crate::provider;
+
+pub fn response_with_body(body: &[u8]) -> http::Response<Bytes> {
+    http::Response::builder()
+        .status(200)
+        .body(Bytes::from(body.to_vec()))
+        .unwrap()
+}
 
 pub async fn spawn_echo_server() -> std::net::SocketAddr {
     let upstream = Router::new().fallback(|request: axum::extract::Request| async move {
@@ -12,6 +20,17 @@ pub async fn spawn_echo_server() -> std::net::SocketAddr {
             .unwrap();
         format!("echoed {} {}", path, String::from_utf8_lossy(&body))
     });
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, upstream).await.unwrap();
+    });
+    addr
+}
+
+/// Spawns an HTTP server that always responds with the given fixed body.
+pub async fn spawn_fixed_response_server(body: &'static str) -> std::net::SocketAddr {
+    let upstream = Router::new().fallback(move || async move { body });
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
