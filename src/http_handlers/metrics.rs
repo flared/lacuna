@@ -90,7 +90,7 @@ mod tests {
 
         let mut manager = ProviderManager::new();
         manager.add(make_provider(
-            "test-tokens",
+            "myprovider",
             &format!("http://{addr}"),
             compat,
         ));
@@ -102,7 +102,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri("/v1/chat/completions")
+                    .uri("/myprovider/v1/chat/completions")
                     .body(Body::from("hello"))
                     .unwrap(),
             )
@@ -118,19 +118,19 @@ mod tests {
         let body = get_metrics_body(app).await;
         assert!(
             body.contains(
-                r#"lacuna_provider_tokens_input_total{provider="test-tokens",handler="openai_chat_completion",user=""} 10"#
+                r#"lacuna_provider_tokens_input_total{provider="myprovider",handler="openai_chat_completion",user=""} 10"#
             ),
             "expected input tokens metric line, got:\n{body}"
         );
         assert!(
             body.contains(
-                r#"lacuna_provider_tokens_output_total{provider="test-tokens",handler="openai_chat_completion",user=""} 20"#
+                r#"lacuna_provider_tokens_output_total{provider="myprovider",handler="openai_chat_completion",user=""} 20"#
             ),
             "expected output tokens metric line, got:\n{body}"
         );
         assert!(
             body.contains(
-                r#"lacuna_provider_tokens_total{provider="test-tokens",handler="openai_chat_completion",user=""} 30"#
+                r#"lacuna_provider_tokens_total{provider="myprovider",handler="openai_chat_completion",user=""} 30"#
             ),
             "expected total tokens metric line, got:\n{body}"
         );
