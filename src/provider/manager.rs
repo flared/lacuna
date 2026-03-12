@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::api_type::ApiType;
+
 use super::Provider;
 
 #[derive(Debug, Default)]
@@ -18,10 +20,10 @@ impl ProviderManager {
         self.providers.insert(key, Arc::new(provider));
     }
 
-    pub fn get_for_path(&self, path: &str) -> Option<&Arc<Provider>> {
+    pub fn get_for_api_type(&self, api_type: &ApiType) -> Option<&Arc<Provider>> {
         self.providers
             .values()
-            .find(|p| p.compatibility.is_compatible(path))
+            .find(|p| p.compatibility.is_compatible(api_type))
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (&String, &Arc<Provider>)> {
@@ -55,10 +57,12 @@ mod tests {
             anthropic_compat,
         ));
 
-        let openai = mgr.get_for_path("/v1/chat/completions").unwrap();
+        let openai = mgr
+            .get_for_api_type(&ApiType::OpenAiChatCompletion)
+            .unwrap();
         assert_eq!(openai.name, "openai");
 
-        let anthropic = mgr.get_for_path("/v1/messages").unwrap();
+        let anthropic = mgr.get_for_api_type(&ApiType::AnthropicMessages).unwrap();
         assert_eq!(anthropic.name, "anthropic");
     }
 
@@ -70,12 +74,15 @@ mod tests {
         compat.openai_chat = true;
         mgr.add(make_provider("openai", "https://example.com", compat));
 
-        assert!(mgr.get_for_path("/v1/messages").is_none());
+        assert!(mgr.get_for_api_type(&ApiType::AnthropicMessages).is_none());
     }
 
     #[test]
     fn empty_manager_returns_none() {
         let mgr = ProviderManager::new();
-        assert!(mgr.get_for_path("/v1/chat/completions").is_none());
+        assert!(
+            mgr.get_for_api_type(&ApiType::OpenAiChatCompletion)
+                .is_none()
+        );
     }
 }

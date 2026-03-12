@@ -15,15 +15,20 @@ pub struct Compatibility {
 }
 
 impl Compatibility {
-    pub fn is_compatible(&self, path: &str) -> bool {
+    pub fn is_compatible(&self, api_type: &ApiType) -> bool {
+        match api_type {
+            ApiType::OpenAiChatCompletion => self.openai_chat,
+            ApiType::OpenAiResponses => self.openai_responses,
+            ApiType::AnthropicMessages => self.anthropic_messages,
+            ApiType::GeminiGenerateContent => self.gemini_generate_content,
+            ApiType::BedrockModelInvoke => self.bedrock_model_invoke,
+            ApiType::GoogleGenerateContent => self.google_generate_content,
+            ApiType::GoogleRawPredict => self.google_raw_predict,
+        }
+    }
+    pub fn is_compatible_with_path(&self, path: &str) -> bool {
         match api_type_for_path(path) {
-            Some(ApiType::OpenAiChatCompletion) => self.openai_chat,
-            Some(ApiType::OpenAiResponses) => self.openai_responses,
-            Some(ApiType::AnthropicMessages) => self.anthropic_messages,
-            Some(ApiType::GeminiGenerateContent) => self.gemini_generate_content,
-            Some(ApiType::BedrockModelInvoke) => self.bedrock_model_invoke,
-            Some(ApiType::GoogleGenerateContent) => self.google_generate_content,
-            Some(ApiType::GoogleRawPredict) => self.google_raw_predict,
+            Some(api_type) => self.is_compatible(&api_type),
             None => false,
         }
     }
@@ -36,20 +41,9 @@ mod tests {
     #[test]
     fn no_flags_matches_nothing() {
         let c = Compatibility::default();
-        assert!(!c.is_compatible("/v1/chat/completions"));
-        assert!(!c.is_compatible("/v1/messages"));
-        assert!(!c.is_compatible("/anything"));
-    }
-
-    #[test]
-    fn disabled_flag_rejects_matching_path() {
-        let c = Compatibility {
-            openai_chat: false,
-            anthropic_messages: true,
-            ..Default::default()
-        };
-        assert!(!c.is_compatible("/v1/chat/completions"));
-        assert!(c.is_compatible("/v1/messages"));
+        assert!(!c.is_compatible(&ApiType::OpenAiChatCompletion));
+        assert!(!c.is_compatible(&ApiType::AnthropicMessages));
+        assert!(!c.is_compatible(&ApiType::BedrockModelInvoke));
     }
 
     #[test]
@@ -60,10 +54,10 @@ mod tests {
             bedrock_model_invoke: true,
             ..Default::default()
         };
-        assert!(c.is_compatible("/v1/chat/completions"));
-        assert!(c.is_compatible("/v1/messages"));
-        assert!(c.is_compatible("/model/us.anthropic.claude-sonnet-4-5/invoke"));
-        assert!(!c.is_compatible("/v1/responses"));
+        assert!(c.is_compatible(&ApiType::OpenAiChatCompletion));
+        assert!(c.is_compatible(&ApiType::AnthropicMessages));
+        assert!(c.is_compatible(&ApiType::BedrockModelInvoke));
+        assert!(!c.is_compatible(&ApiType::OpenAiResponses));
     }
 
     #[test]
