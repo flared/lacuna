@@ -6,7 +6,7 @@ use bytes::Bytes;
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 
-use crate::api_type::{ApiTypeHandler, api_type_for_path};
+use crate::api_type::{ApiType, ApiTypeHandler, api_type_for_path};
 
 use crate::auth;
 use crate::inspecting_stream::InspectingStream;
@@ -16,16 +16,14 @@ use crate::request_metadata::RequestMetadata;
 
 async fn forward_to_provider(
     provider: &provider::Provider,
+    api_type: &ApiType,
     request: axum::extract::Request,
 ) -> Response {
     let method = request.method().to_owned();
     let path = request.uri().path().to_owned();
     let user = auth::get_caller_identity(&request);
-    let api_type_handler = api_type_for_path(&path).map(|t| t.handler());
-    let api_type_handler_id = api_type_handler
-        .as_ref()
-        .map(|h| h.id().to_owned())
-        .unwrap_or_default();
+    let api_type_handler = api_type.handler();
+    let api_type_handler_id = api_type_handler.id().to_owned();
 
     let request_metadata = RequestMetadata {
         provider_key: provider.key.clone(),
@@ -88,7 +86,12 @@ pub async fn provider_proxy_handler(
     State(provider): State<Arc<provider::Provider>>,
     request: axum::extract::Request,
 ) -> Response {
-    forward_to_provider(&provider, request).await
+    let path = request.uri().path().to_owned();
+    let api_type = match api_type_for_path(&path) {
+        Some(api_type) => api_type,
+        None => return (StatusCode::NOT_FOUND, "unknown api type for path").into_response(),
+    };
+    forward_to_provider(&provider, &api_type, request).await
 }
 
 pub async fn proxy_handler(
@@ -96,25 +99,24 @@ pub async fn proxy_handler(
     request: axum::extract::Request,
 ) -> Response {
     let path = request.uri().path().to_owned();
-    let provider = match manager.get_for_path(&path) {
-        Some(p) => p,
-        None => return (StatusCode::NOT_FOUND, "no provider found for path").into_response(),
+    let api_type = match api_type_for_path(&path) {
+        Some(api_type) => api_type,
+        None => return (StatusCode::NOT_FOUND, "unknown api type for path").into_response(),
     };
-    forward_to_provider(provider, request).await
+    let provider = match manager.get_for_api_type(&api_type) {
+        Some(p) => p,
+        None => return (StatusCode::NOT_FOUND, "no provider found for api type").into_response(),
+    };
+    forward_to_provider(provider, &api_type, request).await
 }
 
 fn on_response_stream_complete(
     body: Bytes,
     status_code: u16,
     headers: http::HeaderMap,
-    api_type_handler: Option<Box<dyn ApiTypeHandler + Send>>,
+    api_type_handler: Box<dyn ApiTypeHandler + Send>,
     request_metadata: &RequestMetadata,
 ) {
-    let api_type_handler = match api_type_handler {
-        Some(handler) => handler,
-        None => return,
-    };
-
     let mut response_builder = http::Response::builder().status(status_code);
     for (name, value) in headers.iter() {
         response_builder = response_builder.header(name, value);
