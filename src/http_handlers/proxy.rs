@@ -64,8 +64,15 @@ async fn forward_to_provider(
 
     info!(%method, %path, %status, "upstream_resp");
 
+    let inspect_headers = headers.clone();
     let stream = InspectingStream::new(upstream_res.bytes_stream(), move |body: Bytes| {
-        on_response_stream_complete(body, status_code, api_type_handler, &request_metadata);
+        on_response_stream_complete(
+            body,
+            status_code,
+            inspect_headers,
+            api_type_handler,
+            &request_metadata,
+        );
     });
 
     let body = Body::from_stream(stream);
@@ -99,6 +106,7 @@ pub async fn proxy_handler(
 fn on_response_stream_complete(
     body: Bytes,
     status_code: u16,
+    headers: http::HeaderMap,
     api_type_handler: Option<Box<dyn ApiTypeHandler + Send>>,
     request_metadata: &RequestMetadata,
 ) {
@@ -106,13 +114,19 @@ fn on_response_stream_complete(
         Some(handler) => handler,
         None => return,
     };
-    let response = match http::Response::builder().status(status_code).body(body) {
+
+    let mut response_builder = http::Response::builder().status(status_code);
+    for (name, value) in headers.iter() {
+        response_builder = response_builder.header(name, value);
+    }
+    let response = match response_builder.body(body) {
         Ok(r) => r,
         Err(e) => {
             warn!("Failed to build response: {e}");
             return;
         }
     };
+
     let response_metadata = match api_type_handler.inspect_response(&response) {
         Ok(metadata) => metadata,
         Err(e) => {
