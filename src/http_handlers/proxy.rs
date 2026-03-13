@@ -16,14 +16,18 @@ use crate::request_metadata::RequestMetadata;
 
 async fn forward_to_provider(
     provider: &provider::Provider,
-    api_type: &ApiType,
+    api_type: Option<&ApiType>,
     request: axum::extract::Request,
 ) -> Response {
     let method = request.method().to_owned();
     let path = request.uri().path().to_owned();
     let user = auth::get_caller_identity(&request);
-    let api_type_handler = api_type.handler();
-    let api_type_handler_id = api_type_handler.id().to_owned();
+    let api_type_handler = api_type.map(|t| t.handler());
+    let api_type_handler_id = api_type_handler
+        .as_ref()
+        .map(|h| h.id())
+        .unwrap_or_default() // empty string: ""
+        .to_owned();
 
     let request_metadata = RequestMetadata {
         provider_key: provider.key.clone(),
@@ -62,18 +66,21 @@ async fn forward_to_provider(
 
     info!(%method, %path, %status, "upstream_resp");
 
-    let inspect_headers = headers.clone();
-    let stream = InspectingStream::new(upstream_res.bytes_stream(), move |body: Bytes| {
-        on_response_stream_complete(
-            body,
-            status_code,
-            inspect_headers,
-            api_type_handler,
-            &request_metadata,
-        );
-    });
-
-    let body = Body::from_stream(stream);
+    let body = if let Some(api_type_handler) = api_type_handler {
+        let inspect_headers = headers.clone();
+        let stream = InspectingStream::new(upstream_res.bytes_stream(), move |body: Bytes| {
+            on_response_stream_complete(
+                body,
+                status_code,
+                inspect_headers,
+                api_type_handler,
+                &request_metadata,
+            );
+        });
+        Body::from_stream(stream)
+    } else {
+        Body::from_stream(upstream_res.bytes_stream())
+    };
 
     let mut builder = Response::builder().status(status_code);
     for (name, value) in headers.iter() {
@@ -87,11 +94,8 @@ pub async fn provider_proxy_handler(
     request: axum::extract::Request,
 ) -> Response {
     let path = request.uri().path().to_owned();
-    let api_type = match api_type_for_path(&path) {
-        Some(api_type) => api_type,
-        None => return (StatusCode::NOT_FOUND, "unknown api type for path").into_response(),
-    };
-    forward_to_provider(&provider, &api_type, request).await
+    let api_type = api_type_for_path(&path);
+    forward_to_provider(&provider, api_type.as_ref(), request).await
 }
 
 pub async fn proxy_handler(
@@ -107,7 +111,7 @@ pub async fn proxy_handler(
         Some(p) => p,
         None => return (StatusCode::NOT_FOUND, "no provider found for api type").into_response(),
     };
-    forward_to_provider(provider, &api_type, request).await
+    forward_to_provider(provider, Some(&api_type), request).await
 }
 
 fn on_response_stream_complete(
@@ -145,7 +149,8 @@ mod tests {
     use axum::http::{Request, StatusCode};
     use tower::ServiceExt;
 
-    use crate::provider::{self, ProviderManager};
+    use crate::provider::ProviderManager;
+    use crate::provider::compatibility::Compatibility;
     use crate::test_utils::{make_provider, spawn_echo_server};
 
     #[tokio::test]
@@ -168,7 +173,7 @@ mod tests {
     async fn proxy_forwards_to_upstream() {
         let addr = spawn_echo_server().await;
 
-        let mut compat = provider::compatibility::Compatibility::default();
+        let mut compat = Compatibility::default();
         compat.openai_chat = true;
 
         let mut manager = ProviderManager::new();
@@ -205,7 +210,7 @@ mod tests {
     async fn proxy_routes_by_provider_name_prefix() {
         let addr = spawn_echo_server().await;
 
-        let mut compat = provider::compatibility::Compatibility::default();
+        let mut compat = Compatibility::default();
         compat.openai_chat = true;
 
         let mut manager = ProviderManager::new();
@@ -231,6 +236,46 @@ mod tests {
         assert_eq!(
             String::from_utf8_lossy(&body),
             "echoed /v1/chat/completions hello"
+        );
+    }
+
+    #[tokio::test]
+    async fn proxy_forwards_to_provider_without_api_type() {
+        // We should always be able to call /myprovider/<path> without specifying an API type.
+        // This is useful for very simple lacuna use cases where we just want to proxy a generic
+        // HTTP API that may not even be an AI provider.
+        let addr = spawn_echo_server().await;
+
+        // This is a default compatibility where everything is disabled.
+        let compat = Compatibility::default();
+
+        let mut manager = ProviderManager::new();
+        manager.add(make_provider(
+            "myprovider",
+            &format!("http://{addr}"),
+            compat,
+        ));
+
+        let response = crate::app::AppBuilder::new()
+            .manager(manager)
+            .build()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/myprovider/some/unknown/path")
+                    .body(Body::from("hello"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert_eq!(
+            String::from_utf8_lossy(&body),
+            "echoed /some/unknown/path hello"
         );
     }
 }
