@@ -23,6 +23,9 @@
       "apikey": "${BEDROCK_API_KEY}",
       "compatibility": {
         "bedrock_model_invoke": true
+      },
+      "headers": {
+        "x-foo": "bar"
       }
     }
   }

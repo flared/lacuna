@@ -2,6 +2,8 @@ mod authenticator;
 pub mod compatibility;
 mod manager;
 
+use std::{collections::HashMap, str::FromStr};
+
 use crate::config;
 use authenticator::{ProviderAuthenticator, build_authenticator};
 use compatibility::Compatibility;
@@ -59,6 +61,7 @@ pub struct Provider {
     pub name: String,
     pub baseurl: reqwest::Url,
     client: reqwest::Client,
+    headers: HashMap<String, String>,
     authenticator: Box<dyn ProviderAuthenticator + Send + Sync>,
     pub compatibility: Compatibility,
 }
@@ -72,6 +75,7 @@ impl Provider {
             name: config.name.clone(),
             baseurl,
             client: reqwest::Client::new(),
+            headers: config.headers.clone(),
             authenticator,
             compatibility: config.compatibility.clone(),
         })
@@ -92,7 +96,14 @@ impl Provider {
         let url = self.baseurl.join(relative)?;
 
         let (parts, body) = incoming.into_parts();
-        let headers = strip_hop_headers(parts.headers);
+
+        let mut headers = strip_hop_headers(parts.headers);
+        for (name, value) in &self.headers {
+            headers.insert(
+                reqwest::header::HeaderName::from_str(name)?,
+                reqwest::header::HeaderValue::from_str(value)?,
+            );
+        }
 
         let body = reqwest::Body::wrap_stream(body.into_data_stream());
 
@@ -119,11 +130,13 @@ mod tests {
     use super::*;
     use axum::body::Body;
     use axum::http::Request;
+    use std::collections::HashMap;
 
     fn test_provider(
         baseurl: &str,
         authorization: config::Authorization,
         apikey: &str,
+        headers: HashMap<String, String>,
     ) -> Provider {
         Provider::from_config(
             "test",
@@ -136,6 +149,7 @@ mod tests {
                 authorization,
                 tailnet: false,
                 compatibility: config::Compatibility::default(),
+                headers,
             },
         )
         .expect("test baseurl should be valid")
@@ -151,7 +165,12 @@ mod tests {
 
     #[tokio::test]
     async fn rewrites_base_url() {
-        let provider = test_provider("https://api.anthropic.com", config::Authorization::None, "");
+        let provider = test_provider(
+            "https://api.anthropic.com",
+            config::Authorization::None,
+            "",
+            HashMap::new(),
+        );
         let req = provider
             .build_request(incoming_request("GET", "/v1/messages", Body::empty()))
             .unwrap();
@@ -164,6 +183,7 @@ mod tests {
             "https://openrouter.ai/api/",
             config::Authorization::None,
             "",
+            HashMap::new(),
         );
         let req = provider
             .build_request(incoming_request(
@@ -184,6 +204,7 @@ mod tests {
             "https://api.example.com",
             config::Authorization::Bearer,
             "sk-test-key",
+            HashMap::new(),
         );
         let req = provider
             .build_request(incoming_request("POST", "/v1/chat", Body::empty()))
@@ -200,6 +221,7 @@ mod tests {
             "https://api.anthropic.com",
             config::Authorization::XApiKey,
             "sk-ant-key",
+            HashMap::new(),
         );
         let req = provider
             .build_request(incoming_request("POST", "/v1/messages", Body::empty()))
@@ -214,6 +236,7 @@ mod tests {
             "https://generativelanguage.googleapis.com",
             config::Authorization::XGoogApiKey,
             "goog-key",
+            HashMap::new(),
         );
         let req = provider
             .build_request(incoming_request("POST", "/v1/models", Body::empty()))
@@ -223,7 +246,12 @@ mod tests {
 
     #[tokio::test]
     async fn no_auth() {
-        let provider = test_provider("https://example.com", config::Authorization::None, "");
+        let provider = test_provider(
+            "https://example.com",
+            config::Authorization::None,
+            "",
+            HashMap::new(),
+        );
         let req = provider
             .build_request(incoming_request("GET", "/health", Body::empty()))
             .unwrap();
@@ -234,7 +262,12 @@ mod tests {
 
     #[tokio::test]
     async fn preserves_path() {
-        let provider = test_provider("https://api.example.com/", config::Authorization::None, "");
+        let provider = test_provider(
+            "https://api.example.com/",
+            config::Authorization::None,
+            "",
+            HashMap::new(),
+        );
         let req = provider
             .build_request(incoming_request(
                 "GET",
@@ -250,7 +283,12 @@ mod tests {
 
     #[tokio::test]
     async fn forwards_body() {
-        let provider = test_provider("https://api.example.com", config::Authorization::None, "");
+        let provider = test_provider(
+            "https://api.example.com",
+            config::Authorization::None,
+            "",
+            HashMap::new(),
+        );
         let payload = b"{\"prompt\":\"hello\"}";
         let req = provider
             .build_request(incoming_request(
@@ -264,6 +302,28 @@ mod tests {
         // The body is a stream so as_bytes() is None, but we can verify it
         // is present (not None).
         assert!(req.body().is_some());
+    }
+
+    #[tokio::test]
+    async fn custom_headers_are_sent() {
+        let headers = HashMap::from([
+            ("x-first-header".to_owned(), "foo".to_owned()),
+            ("x-second-header".to_owned(), "bar".to_owned()),
+            ("authorization".to_owned(), "baz".to_owned()),
+        ]);
+        let provider = test_provider(
+            "https://api.example.com",
+            config::Authorization::Bearer,
+            "sk-key",
+            headers,
+        );
+        let req = provider
+            .build_request(incoming_request("POST", "/v1/chat", Body::empty()))
+            .unwrap();
+        assert_eq!(req.headers().get("x-first-header").unwrap(), "foo");
+        assert_eq!(req.headers().get("x-second-header").unwrap(), "bar");
+        // Auth is applied after custom headers, so it should still be present.
+        assert_eq!(req.headers().get("authorization").unwrap(), "Bearer sk-key");
     }
 
     #[test]
