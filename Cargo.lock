@@ -831,7 +831,7 @@ dependencies = [
 
 [[package]]
 name = "lacuna"
-version = "0.12.0"
+version = "0.13.30"
 dependencies = [
  "anyhow",
  "axum",
