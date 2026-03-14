@@ -7,7 +7,7 @@ use tower_http::trace::{
 };
 use tracing::{Span, info};
 
-use crate::auth;
+use crate::http_middleware::auth;
 
 #[derive(Debug, Clone)]
 pub struct LacunaMakeSpan;
@@ -16,7 +16,10 @@ impl MakeSpan<Body> for LacunaMakeSpan {
     fn make_span(&mut self, request: &Request<Body>) -> Span {
         let method = request.method().to_string();
         let path = request.uri().path().to_string();
-        let caller = auth::get_caller_identity(request).unwrap_or_else(|| "-".to_string());
+        let caller = match auth::get_caller_identity(request) {
+            Some(auth::Identity::LoginUser(email)) => email,
+            _ => "-".to_string(),
+        };
         tracing::info_span!("request", %method, %path, %caller)
     }
 }

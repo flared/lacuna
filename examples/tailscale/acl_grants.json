@@ -1,0 +1,17 @@
+{
+  "grants": [
+    {
+      "src": [
+        "user@example.com",
+        "group:engineering"
+      ],
+      "dst": ["tag:lacuna"],
+      "app": {
+        "flare.io/cap/lacuna": [
+          { "providers": ["myprovider"] },
+          { "providers": ["prefix-*"] }
+        ]
+      }
+    }
+  ]
+}
