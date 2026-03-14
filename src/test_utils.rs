@@ -1,5 +1,6 @@
 use axum::Router;
 use bytes::Bytes;
+use std::collections::HashMap;
 use tokio::net::TcpListener;
 
 use crate::config;
@@ -55,6 +56,7 @@ pub fn make_provider(
             authorization: config::Authorization::None,
             tailnet: false,
             compatibility: compat,
+            headers: HashMap::new(),
         },
     )
     .unwrap()

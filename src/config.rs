@@ -23,6 +23,7 @@ pub struct Lacuna {
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct Provider {
     #[serde(default)]
     pub name: String,
@@ -46,6 +47,9 @@ pub struct Provider {
 
     #[serde(default)]
     pub compatibility: Compatibility,
+
+    #[serde(default)]
+    pub headers: HashMap<String, String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Default, PartialEq)]
@@ -121,7 +125,10 @@ mod tests {
               "name": "Gemini",
               "baseurl": "https://generativelanguage.googleapis.com",
               "models": ["gemini-2.0-flash"],
-              "authorization": "x-goog-api-key"
+              "authorization": "x-goog-api-key",
+              "headers": {
+                "x-some-header": "foo"
+              }
             }
           }
         }"#;
@@ -146,6 +153,10 @@ mod tests {
         let gemini = &config.providers["gemini"];
         assert_eq!(gemini.authorization, Authorization::XGoogApiKey);
         assert!(!gemini.compatibility.openai_chat);
+        assert_eq!(
+            gemini.headers,
+            HashMap::from([("x-some-header".to_string(), "foo".to_string())])
+        );
         assert!(!gemini.compatibility.openai_responses);
     }
 
@@ -165,6 +176,7 @@ mod tests {
         assert_eq!(p.name, "Minimal");
         assert_eq!(p.apikey, "");
         assert_eq!(p.authorization, Authorization::None);
+        assert!(p.headers.is_empty());
         assert!(!p.tailnet);
         assert_eq!(p.description, "");
         assert!(!p.compatibility.openai_chat);
