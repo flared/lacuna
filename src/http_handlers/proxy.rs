@@ -2,15 +2,15 @@ use axum::body::Body;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use bytes::Bytes;
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 
-use crate::api_type::{ApiType, ApiTypeHandler, api_type_for_path};
+use crate::api_type::{ApiType, api_type_for_path};
 
 use crate::capabilities::Capabilities;
 use crate::http_middleware::{auth, capabilities};
-use crate::inspecting_stream::InspectingStream;
+use crate::inspector::CallbackInspector;
+use crate::inspector::stream::InspectorStream;
 use crate::metrics;
 use crate::provider::{self, ProviderManager};
 use crate::request_metadata::RequestMetadata;
@@ -77,16 +77,12 @@ async fn forward_to_provider(
     info!(%method, %path, %status, "upstream_resp");
 
     let body = if let Some(api_type_handler) = api_type_handler {
-        let inspect_headers = headers.clone();
-        let stream = InspectingStream::new(upstream_res.bytes_stream(), move |body: Bytes| {
-            on_response_stream_complete(
-                body,
-                status_code,
-                inspect_headers,
-                api_type_handler,
-                &request_metadata,
-            );
+        let inspector = api_type_handler.inspector(status_code, &headers);
+        let inspector = CallbackInspector::new(inspector, move |result| match result {
+            Ok(metadata) => metrics::record_response(&request_metadata, metadata),
+            Err(e) => warn!("Failed to inspect response: {e}"),
         });
+        let stream = InspectorStream::new(upstream_res.bytes_stream(), Box::new(inspector));
         Body::from_stream(stream)
     } else {
         Body::from_stream(upstream_res.bytes_stream())
@@ -134,35 +130,6 @@ fn capabilities_forbidden_response(error: &str, capabilities: &Capabilities) -> 
         .header("content-type", "application/json")
         .body(Body::from(body.to_string()))
         .unwrap()
-}
-
-fn on_response_stream_complete(
-    body: Bytes,
-    status_code: u16,
-    headers: http::HeaderMap,
-    api_type_handler: Box<dyn ApiTypeHandler + Send>,
-    request_metadata: &RequestMetadata,
-) {
-    let mut response_builder = http::Response::builder().status(status_code);
-    for (name, value) in headers.iter() {
-        response_builder = response_builder.header(name, value);
-    }
-    let response = match response_builder.body(body) {
-        Ok(r) => r,
-        Err(e) => {
-            warn!("Failed to build response: {e}");
-            return;
-        }
-    };
-
-    let response_metadata = match api_type_handler.inspect_response(&response) {
-        Ok(metadata) => metadata,
-        Err(e) => {
-            warn!("Failed to inspect response: {e}");
-            return;
-        }
-    };
-    metrics::record_response(request_metadata, &response_metadata);
 }
 
 #[cfg(test)]

@@ -1,5 +1,4 @@
-use super::ApiTypeHandler;
-use super::ResponseMetadata;
+use super::{ApiTypeHandler, MetadataInspector, ResponseMetadata, StaticInspector};
 
 pub struct BedrockModelInvokeHandler;
 
@@ -8,22 +7,23 @@ impl ApiTypeHandler for BedrockModelInvokeHandler {
         "bedrock_model_invoke"
     }
 
-    fn inspect_response(
-        &self,
-        response: &http::Response<bytes::Bytes>,
-    ) -> Result<ResponseMetadata, anyhow::Error> {
-        Ok(ResponseMetadata {
-            input_tokens: parse_token_header(response, "x-amzn-bedrock-input-token-count")?,
-            output_tokens: parse_token_header(response, "x-amzn-bedrock-output-token-count")?,
-        })
+    fn inspector(&self, _status: u16, headers: &http::HeaderMap) -> MetadataInspector {
+        let input_tokens =
+            parse_token_header(headers, "x-amzn-bedrock-input-token-count").unwrap_or(None);
+        let output_tokens =
+            parse_token_header(headers, "x-amzn-bedrock-output-token-count").unwrap_or(None);
+        Box::new(StaticInspector::new(ResponseMetadata {
+            input_tokens,
+            output_tokens,
+        }))
     }
 }
 
 fn parse_token_header(
-    response: &http::Response<bytes::Bytes>,
+    headers: &http::HeaderMap,
     header: &str,
 ) -> Result<Option<u64>, anyhow::Error> {
-    match response.headers().get(header) {
+    match headers.get(header) {
         Some(value) => Ok(Some(value.to_str()?.parse::<u64>()?)),
         None => Ok(None),
     }
@@ -32,47 +32,46 @@ fn parse_token_header(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bytes::Bytes;
 
-    fn response_with_headers(headers: &[(&str, &str)]) -> http::Response<Bytes> {
-        let mut builder = http::Response::builder().status(200);
+    fn headers_to_map(headers: &[(&str, &str)]) -> http::HeaderMap {
+        let mut map = http::HeaderMap::new();
         for (key, value) in headers {
-            builder = builder.header(*key, *value);
+            map.insert(
+                http::header::HeaderName::from_bytes(key.as_bytes()).unwrap(),
+                value.parse().unwrap(),
+            );
         }
-        builder.body(Bytes::new()).unwrap()
+        map
     }
 
     #[test]
     fn inspect_response_with_headers() {
-        let response = response_with_headers(&[
+        let headers = headers_to_map(&[
             ("x-amzn-bedrock-input-token-count", "25"),
             ("x-amzn-bedrock-output-token-count", "150"),
         ]);
-        let metadata = BedrockModelInvokeHandler
-            .inspect_response(&response)
-            .unwrap();
+        let inspector = BedrockModelInvokeHandler.inspector(200, &headers);
+        let metadata = inspector.finish().unwrap();
         assert_eq!(metadata.input_tokens, Some(25));
         assert_eq!(metadata.output_tokens, Some(150));
     }
 
     #[test]
     fn inspect_response_missing_headers() {
-        let response = response_with_headers(&[]);
-        let metadata = BedrockModelInvokeHandler
-            .inspect_response(&response)
-            .unwrap();
+        let headers = http::HeaderMap::new();
+        let inspector = BedrockModelInvokeHandler.inspector(200, &headers);
+        let metadata = inspector.finish().unwrap();
         assert_eq!(metadata.input_tokens, None);
         assert_eq!(metadata.output_tokens, None);
     }
 
     #[test]
     fn inspect_response_invalid_header() {
-        let response =
-            response_with_headers(&[("x-amzn-bedrock-input-token-count", "not_a_number")]);
-        assert!(
-            BedrockModelInvokeHandler
-                .inspect_response(&response)
-                .is_err()
-        );
+        let headers = headers_to_map(&[("x-amzn-bedrock-input-token-count", "not_a_number")]);
+        let inspector = BedrockModelInvokeHandler.inspector(200, &headers);
+        let metadata = inspector.finish().unwrap();
+        // Invalid headers are silently ignored (unwrap_or(None) in inspector())
+        assert_eq!(metadata.input_tokens, None);
+        assert_eq!(metadata.output_tokens, None);
     }
 }

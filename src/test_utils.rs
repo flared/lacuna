@@ -1,17 +1,9 @@
 use axum::Router;
-use bytes::Bytes;
 use std::collections::HashMap;
 use tokio::net::TcpListener;
 
 use crate::config;
 use crate::provider;
-
-pub fn response_with_body(body: &[u8]) -> http::Response<Bytes> {
-    http::Response::builder()
-        .status(200)
-        .body(Bytes::from(body.to_vec()))
-        .unwrap()
-}
 
 pub async fn spawn_echo_server() -> std::net::SocketAddr {
     let upstream = Router::new().fallback(|request: axum::extract::Request| async move {

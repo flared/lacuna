@@ -1,4 +1,6 @@
-use super::super::{ApiTypeHandler, ResponseMetadata};
+use super::super::{ApiTypeHandler, Inspector, MetadataInspector, ResponseMetadata};
+use crate::inspector::protocol::ProtocolInspector;
+use crate::inspector::protocol::text::{TextBody, TextProtocol};
 use serde::Deserialize;
 
 // https://platform.openai.com/docs/api-reference/responses/object
@@ -20,22 +22,46 @@ impl ApiTypeHandler for OpenAiResponsesHandler {
         "openai_responses"
     }
 
-    fn inspect_response(
-        &self,
-        response: &http::Response<bytes::Bytes>,
-    ) -> Result<ResponseMetadata, anyhow::Error> {
-        let parsed = serde_json::from_slice::<OpenAiResponsesResponse>(response.body())?;
-        Ok(ResponseMetadata {
-            input_tokens: Some(parsed.usage.input_tokens),
-            output_tokens: Some(parsed.usage.output_tokens),
-        })
+    fn inspector(&self, _status: u16, _headers: &http::HeaderMap) -> MetadataInspector {
+        Box::new(ProtocolInspector::new(
+            TextProtocol::new(),
+            OpenAiResponsesInspector { metadata: None },
+        ))
     }
+}
+
+struct OpenAiResponsesInspector {
+    metadata: Option<Result<ResponseMetadata, anyhow::Error>>,
+}
+
+impl Inspector<TextBody> for OpenAiResponsesInspector {
+    type Output = ResponseMetadata;
+
+    fn feed(&mut self, body: TextBody) {
+        self.metadata = Some(parse_responses(&body.data));
+    }
+
+    fn finish(self: Box<Self>) -> Result<ResponseMetadata, anyhow::Error> {
+        self.metadata
+            .unwrap_or_else(|| Err(anyhow::anyhow!("no response body")))
+    }
+}
+
+fn parse_responses(data: &[u8]) -> Result<ResponseMetadata, anyhow::Error> {
+    let parsed = serde_json::from_slice::<OpenAiResponsesResponse>(data)?;
+    Ok(ResponseMetadata {
+        input_tokens: Some(parsed.usage.input_tokens),
+        output_tokens: Some(parsed.usage.output_tokens),
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::response_with_body;
+
+    fn make_inspector() -> MetadataInspector {
+        OpenAiResponsesHandler.inspector(200, &http::HeaderMap::new())
+    }
 
     #[test]
     fn inspect_response_full() {
@@ -45,25 +71,24 @@ mod tests {
             "model": "gpt-4o",
             "usage": {"input_tokens": 10, "output_tokens": 30, "total_tokens": 40}
         }"#;
-        let metadata = OpenAiResponsesHandler
-            .inspect_response(&response_with_body(body))
-            .unwrap();
+        let mut inspector = make_inspector();
+        inspector.feed(body);
+        let metadata = inspector.finish().unwrap();
         assert_eq!(metadata.input_tokens, Some(10));
         assert_eq!(metadata.output_tokens, Some(30));
     }
 
     #[test]
     fn inspect_response_missing_usage() {
-        let response = response_with_body(br#"{"id": "resp_abc123", "object": "response"}"#);
-        assert!(OpenAiResponsesHandler.inspect_response(&response).is_err());
+        let mut inspector = make_inspector();
+        inspector.feed(br#"{"id": "resp_abc123", "object": "response"}"#);
+        assert!(inspector.finish().is_err());
     }
 
     #[test]
     fn inspect_response_invalid_json() {
-        assert!(
-            OpenAiResponsesHandler
-                .inspect_response(&response_with_body(b"not json"))
-                .is_err()
-        );
+        let mut inspector = make_inspector();
+        inspector.feed(b"not json");
+        assert!(inspector.finish().is_err());
     }
 }

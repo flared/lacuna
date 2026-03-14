@@ -7,7 +7,10 @@ mod openai;
 use regex::Regex;
 use std::sync::LazyLock;
 
+pub use crate::inspector::{ByteInspector, Inspector, StaticInspector};
 pub use crate::request_metadata::ResponseMetadata;
+
+pub type MetadataInspector = ByteInspector<ResponseMetadata>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ApiType {
@@ -22,10 +25,13 @@ pub enum ApiType {
 
 pub trait ApiTypeHandler {
     fn id(&self) -> &'static str;
-    fn inspect_response(
-        &self,
-        response: &http::Response<bytes::Bytes>,
-    ) -> Result<ResponseMetadata, anyhow::Error>;
+
+    /// Create an inspector for this response.
+    /// The inspector pairs a protocol parser with provider-specific metadata extraction.
+    /// Defaults to a no-op inspector that returns empty metadata.
+    fn inspector(&self, _status: u16, _headers: &http::HeaderMap) -> MetadataInspector {
+        Box::new(StaticInspector::default())
+    }
 }
 
 impl ApiType {
