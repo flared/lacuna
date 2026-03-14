@@ -1,6 +1,10 @@
 use serde::Deserialize;
 
-use super::{ApiTypeHandler, ResponseMetadata};
+use crate::inspector::protocol::ProtocolInspector;
+use crate::inspector::protocol::sse::{SseEvent, SseProtocol};
+use crate::inspector::protocol::text::{TextBody, TextProtocol};
+
+use super::{ApiTypeHandler, Inspector, MetadataInspector, ResponseMetadata};
 
 #[derive(Debug, Deserialize)]
 struct Usage {
@@ -32,47 +36,50 @@ impl ApiTypeHandler for AnthropicMessagesHandler {
         "anthropic_messages"
     }
 
-    fn inspect_response(
-        &self,
-        response: &http::Response<bytes::Bytes>,
-    ) -> Result<ResponseMetadata, anyhow::Error> {
-        if is_event_stream(response) {
-            inspect_sse_response(response.body())
+    fn inspector(&self, _status: u16, headers: &http::HeaderMap) -> MetadataInspector {
+        if is_event_stream(headers) {
+            Box::new(ProtocolInspector::new(
+                SseProtocol::new(),
+                AnthropicSseInspector {
+                    input_tokens: None,
+                    output_tokens: None,
+                },
+            ))
         } else {
-            let parsed = serde_json::from_slice::<AnthropicDataWithUsage>(response.body())?;
-            Ok(ResponseMetadata {
-                input_tokens: parsed.usage.input_tokens,
-                output_tokens: parsed.usage.output_tokens,
-            })
+            Box::new(ProtocolInspector::new(
+                TextProtocol::new(),
+                AnthropicJsonInspector { metadata: None },
+            ))
         }
     }
 }
 
-fn is_event_stream(response: &http::Response<bytes::Bytes>) -> bool {
-    response
-        .headers()
+fn is_event_stream(headers: &http::HeaderMap) -> bool {
+    headers
         .get(http::header::CONTENT_TYPE)
         .and_then(|v| v.to_str().ok())
         .is_some_and(|ct| ct.starts_with("text/event-stream"))
 }
 
-fn inspect_sse_response(body: &bytes::Bytes) -> Result<ResponseMetadata, anyhow::Error> {
-    let text = std::str::from_utf8(body)?;
-    let mut input_tokens: Option<u64> = None;
-    let mut output_tokens: Option<u64> = None;
-    for line in text.lines() {
-        if let Some(data) = line.strip_prefix("data: ")
-            && let Ok(event) = serde_json::from_str::<SseEventType>(data)
-        {
-            match event.r#type.as_str() {
+struct AnthropicSseInspector {
+    input_tokens: Option<u64>,
+    output_tokens: Option<u64>,
+}
+
+impl Inspector<SseEvent> for AnthropicSseInspector {
+    type Output = ResponseMetadata;
+
+    fn feed(&mut self, event: SseEvent) {
+        if let Ok(evt) = serde_json::from_str::<SseEventType>(&event.data) {
+            match evt.r#type.as_str() {
                 "message_start" => {
-                    if let Ok(msg) = serde_json::from_str::<MessageStartData>(data) {
-                        input_tokens = msg.message.usage.input_tokens;
+                    if let Ok(msg) = serde_json::from_str::<MessageStartData>(&event.data) {
+                        self.input_tokens = msg.message.usage.input_tokens;
                     }
                 }
                 "message_delta" => {
-                    if let Ok(delta) = serde_json::from_str::<AnthropicDataWithUsage>(data) {
-                        output_tokens = delta.usage.output_tokens;
+                    if let Ok(delta) = serde_json::from_str::<AnthropicDataWithUsage>(&event.data) {
+                        self.output_tokens = delta.usage.output_tokens;
                     }
                 }
                 _ => {}
@@ -80,20 +87,59 @@ fn inspect_sse_response(body: &bytes::Bytes) -> Result<ResponseMetadata, anyhow:
         }
     }
 
-    if input_tokens.is_none() && output_tokens.is_none() {
-        anyhow::bail!("no token usage found in SSE stream");
+    fn finish(self: Box<Self>) -> Result<ResponseMetadata, anyhow::Error> {
+        if self.input_tokens.is_none() && self.output_tokens.is_none() {
+            anyhow::bail!("no token usage found in SSE stream");
+        }
+
+        Ok(ResponseMetadata {
+            input_tokens: self.input_tokens,
+            output_tokens: self.output_tokens,
+        })
+    }
+}
+
+struct AnthropicJsonInspector {
+    metadata: Option<Result<ResponseMetadata, anyhow::Error>>,
+}
+
+impl Inspector<TextBody> for AnthropicJsonInspector {
+    type Output = ResponseMetadata;
+
+    fn feed(&mut self, body: TextBody) {
+        self.metadata = Some(parse_anthropic_json(&body.data));
     }
 
+    fn finish(self: Box<Self>) -> Result<ResponseMetadata, anyhow::Error> {
+        self.metadata
+            .unwrap_or_else(|| Err(anyhow::anyhow!("no response body")))
+    }
+}
+
+fn parse_anthropic_json(data: &[u8]) -> Result<ResponseMetadata, anyhow::Error> {
+    let parsed = serde_json::from_slice::<AnthropicDataWithUsage>(data)?;
     Ok(ResponseMetadata {
-        input_tokens,
-        output_tokens,
+        input_tokens: parsed.usage.input_tokens,
+        output_tokens: parsed.usage.output_tokens,
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::response_with_body;
+
+    fn make_json_inspector() -> MetadataInspector {
+        AnthropicMessagesHandler.inspector(200, &http::HeaderMap::new())
+    }
+
+    fn make_sse_inspector() -> MetadataInspector {
+        let mut headers = http::HeaderMap::new();
+        headers.insert(
+            http::header::CONTENT_TYPE,
+            "text/event-stream".parse().unwrap(),
+        );
+        AnthropicMessagesHandler.inspector(200, &headers)
+    }
 
     #[test]
     fn inspect_response_full() {
@@ -105,35 +151,30 @@ mod tests {
             "model": "claude-sonnet-4-20250514",
             "usage": {"input_tokens": 25, "output_tokens": 150}
         }"#;
-        let metadata = AnthropicMessagesHandler
-            .inspect_response(&response_with_body(body))
-            .unwrap();
+        let mut inspector = make_json_inspector();
+        inspector.feed(body);
+        let metadata = inspector.finish().unwrap();
         assert_eq!(metadata.input_tokens, Some(25));
         assert_eq!(metadata.output_tokens, Some(150));
     }
 
     #[test]
     fn inspect_response_missing_usage() {
-        let response = response_with_body(br#"{"id": "msg_123", "type": "message"}"#);
-        assert!(
-            AnthropicMessagesHandler
-                .inspect_response(&response)
-                .is_err()
-        );
+        let mut inspector = make_json_inspector();
+        inspector.feed(br#"{"id": "msg_123", "type": "message"}"#);
+        assert!(inspector.finish().is_err());
     }
 
     #[test]
     fn inspect_response_invalid_json() {
-        assert!(
-            AnthropicMessagesHandler
-                .inspect_response(&response_with_body(b"not json"))
-                .is_err()
-        );
+        let mut inspector = make_json_inspector();
+        inspector.feed(b"not json");
+        assert!(inspector.finish().is_err());
     }
 
     #[test]
     fn inspect_response_sse_stream() {
-        let body = r#"event: message_start
+        let body = br#"event: message_start
 data: {"type":"message_start","message":{"id":"msg_123","type":"message","role":"assistant","content":[],"model":"claude-sonnet-4-20250514","usage":{"input_tokens":25,"output_tokens":1}}}
 
 event: content_block_start
@@ -152,14 +193,27 @@ event: message_stop
 data: {"type":"message_stop"}
 
 "#;
-        let response = http::Response::builder()
-            .status(200)
-            .header(http::header::CONTENT_TYPE, "text/event-stream")
-            .body(bytes::Bytes::from(body))
-            .unwrap();
-        let metadata = AnthropicMessagesHandler
-            .inspect_response(&response)
-            .unwrap();
+        let mut inspector = make_sse_inspector();
+        inspector.feed(body);
+        let metadata = inspector.finish().unwrap();
+        assert_eq!(metadata.input_tokens, Some(25));
+        assert_eq!(metadata.output_tokens, Some(150));
+    }
+
+    #[test]
+    fn inspect_sse_chunked() {
+        let chunk1 = br#"event: message_start
+data: {"type":"message_start","message":{"id":"msg_123","type":"message","role":"assistant","content":[],"model":"claude-sonnet-4-20250514","usage":{"input_tokens":25,"output_tokens":1}}}
+
+"#;
+        let chunk2 = br#"event: message_delta
+data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":150}}
+
+"#;
+        let mut inspector = make_sse_inspector();
+        inspector.feed(chunk1);
+        inspector.feed(chunk2);
+        let metadata = inspector.finish().unwrap();
         assert_eq!(metadata.input_tokens, Some(25));
         assert_eq!(metadata.output_tokens, Some(150));
     }

@@ -4,7 +4,7 @@ pub mod capabilities;
 pub mod config;
 pub mod http_handlers;
 pub mod http_middleware;
-pub mod inspecting_stream;
+pub mod inspector;
 pub mod logging;
 pub mod metrics;
 pub mod provider;
