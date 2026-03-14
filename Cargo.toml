@@ -22,14 +22,16 @@ thiserror = ">=2"
 clap = { version = ">=4", features = ["derive"] }
 url = ">=2.5.8"
 regex = ">=1"
+glob = ">=0.3"
 anyhow = ">=1.0.102"
 tracing = ">=0.1"
 tracing-subscriber = { version = ">=0.3", features = ["json", "env-filter"] }
 tower-http = { version = ">=0.6", features = ["trace", "fs"] }
 metrics = ">=0.24"
 metrics-exporter-prometheus = ">=0.16"
+rfc2047-decoder = ">=1.1.0"
+serde_with = ">=3.18.0"
 
 [dev-dependencies]
 tower = { version = ">=0.5", features = ["util"] }
 temp-env = ">=0.3"
-glob = ">=0.3"

@@ -20,6 +20,9 @@ pub struct Lacuna {
 
     #[serde(default)]
     pub identity_header: Option<String>,
+
+    #[serde(default)]
+    pub capabilities_header: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]

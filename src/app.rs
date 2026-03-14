@@ -2,8 +2,9 @@ use axum::{Router, response::Redirect, routing::get};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use crate::auth;
 use crate::http_handlers;
+use crate::http_middleware::auth;
+use crate::http_middleware::capabilities;
 use crate::provider::ProviderManager;
 use crate::trace;
 
@@ -12,6 +13,7 @@ pub struct AppBuilder {
     manager: Option<ProviderManager>,
     assets_path: Option<PathBuf>,
     identity_header: Option<String>,
+    capabilities_header: Option<String>,
 }
 
 impl AppBuilder {
@@ -20,6 +22,7 @@ impl AppBuilder {
             manager: None,
             assets_path: None,
             identity_header: None,
+            capabilities_header: None,
         }
     }
 
@@ -35,6 +38,11 @@ impl AppBuilder {
 
     pub fn identity_header(mut self, header: Option<String>) -> Self {
         self.identity_header = header;
+        self
+    }
+
+    pub fn capabilities_header(mut self, header: Option<String>) -> Self {
+        self.capabilities_header = header;
         self
     }
 
@@ -67,6 +75,12 @@ impl AppBuilder {
         if let Some(header_name) = self.identity_header {
             router = router.layer(axum::middleware::from_fn(move |request, next| {
                 auth::identity_middleware(header_name.clone(), request, next)
+            }));
+        }
+
+        if let Some(header_name) = self.capabilities_header {
+            router = router.layer(axum::middleware::from_fn(move |request, next| {
+                capabilities::capabilities_middleware(header_name.clone(), request, next)
             }));
         }
 

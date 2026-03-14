@@ -8,7 +8,8 @@ use tracing::{debug, info, warn};
 
 use crate::api_type::{ApiType, ApiTypeHandler, api_type_for_path};
 
-use crate::auth;
+use crate::capabilities::Capabilities;
+use crate::http_middleware::{auth, capabilities};
 use crate::inspecting_stream::InspectingStream;
 use crate::metrics;
 use crate::provider::{self, ProviderManager};
@@ -19,6 +20,15 @@ async fn forward_to_provider(
     api_type: Option<&ApiType>,
     request: axum::extract::Request,
 ) -> Response {
+    if let Some(caps) = capabilities::get_capabilities(&request)
+        && !caps.is_provider_allowed(&provider.key)
+    {
+        return capabilities_forbidden_response(
+            &format!("provider '{}' is not allowed", &provider.key),
+            &caps,
+        );
+    }
+
     let method = request.method().to_owned();
     let path = request.uri().path().to_owned();
     let user = auth::get_caller_identity(&request);
@@ -112,6 +122,18 @@ pub async fn proxy_handler(
         None => return (StatusCode::NOT_FOUND, "no provider found for api type").into_response(),
     };
     forward_to_provider(provider, Some(&api_type), request).await
+}
+
+fn capabilities_forbidden_response(error: &str, capabilities: &Capabilities) -> Response {
+    let body = serde_json::json!({
+        "error": error,
+        "capabilities": capabilities,
+    });
+    Response::builder()
+        .status(StatusCode::FORBIDDEN)
+        .header("content-type", "application/json")
+        .body(Body::from(body.to_string()))
+        .unwrap()
 }
 
 fn on_response_stream_complete(
@@ -277,5 +299,66 @@ mod tests {
             String::from_utf8_lossy(&body),
             "echoed /some/unknown/path hello"
         );
+    }
+
+    #[tokio::test]
+    async fn proxy_validates_capabilities() {
+        let addr = spawn_echo_server().await;
+
+        let mut manager = ProviderManager::new();
+        manager.add(make_provider(
+            "myprovider",
+            &format!("http://{addr}"),
+            Compatibility::default(),
+        ));
+
+        let app = crate::app::AppBuilder::new()
+            .manager(manager)
+            .capabilities_header(Some("Tailscale-App-Capabilities".to_owned()))
+            .build();
+
+        // Request without the capabilities header — should be forbidden.
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/myprovider/endpoint")
+                    .body(Body::from("test"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            body,
+            serde_json::json!({
+                "error": "provider 'myprovider' is not allowed",
+                "capabilities":  {"providers": [] }
+            })
+        );
+
+        // Request with the capabilities header granting access — should succeed.
+        let caps_header = serde_json::json!({
+            "flare.io/cap/lacuna": [
+                {"providers": ["myprovider"] }
+            ]
+        });
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/myprovider/endpoint")
+                    .header("Tailscale-App-Capabilities", caps_header.to_string())
+                    .body(Body::from("test"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
     }
 }

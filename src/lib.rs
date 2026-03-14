@@ -1,8 +1,9 @@
 pub mod api_type;
 pub mod app;
-pub mod auth;
+pub mod capabilities;
 pub mod config;
 pub mod http_handlers;
+pub mod http_middleware;
 pub mod inspecting_stream;
 pub mod logging;
 pub mod metrics;
