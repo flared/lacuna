@@ -1,3 +1,4 @@
+pub mod amazon_eventstream;
 pub mod sse;
 pub mod text;
 
