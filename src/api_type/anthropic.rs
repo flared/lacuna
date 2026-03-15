@@ -89,13 +89,13 @@ impl Inspector<SseEvent> for AnthropicSseInspector {
 
     fn finish(self: Box<Self>) -> Result<ResponseMetadata, anyhow::Error> {
         if self.input_tokens.is_none() && self.output_tokens.is_none() {
-            anyhow::bail!("no token usage found in SSE stream");
+            return Err(anyhow::anyhow!("no token usage found in SSE stream"));
         }
-
-        Ok(ResponseMetadata {
+        let response_metadata = ResponseMetadata {
             input_tokens: self.input_tokens,
             output_tokens: self.output_tokens,
-        })
+        };
+        Ok(response_metadata)
     }
 }
 
