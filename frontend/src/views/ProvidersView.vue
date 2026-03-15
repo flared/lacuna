@@ -9,7 +9,14 @@ const { data, isLoading, error } = useConfig();
     <v-card-text>
       <v-progress-circular v-if="isLoading" indeterminate />
       <v-alert v-else-if="error" type="error">{{ error.message }}</v-alert>
-      <pre v-else>{{ JSON.stringify(data, null, 2) }}</pre>
+      <v-list v-else-if="data">
+        <v-list-item
+          v-for="provider in Object.values(data)"
+          :key="provider.key"
+          :title="provider.name"
+          :to="{ name: 'provider', params: { key: provider.key } }"
+        />
+      </v-list>
     </v-card-text>
   </v-card>
 </template>

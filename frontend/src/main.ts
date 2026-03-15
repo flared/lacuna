@@ -16,6 +16,9 @@ const vuetify = createVuetify({
           background: "#f1f5f9",
           surface: "#ffffff",
         },
+        variables: {
+          "theme-overlay-multiplier": 1,
+        },
       },
       dark: {
         dark: true,
@@ -23,6 +26,9 @@ const vuetify = createVuetify({
           primary: "#2563eb",
           background: "#121212",
           surface: "#1e1e1e",
+        },
+        variables: {
+          "theme-overlay-multiplier": 1,
         },
       },
     },
