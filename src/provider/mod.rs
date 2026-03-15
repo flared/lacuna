@@ -55,7 +55,6 @@ fn strip_hop_headers(mut headers: axum::http::HeaderMap) -> axum::http::HeaderMa
 
 #[derive(Debug)]
 pub struct Provider {
-    #[allow(dead_code)]
     pub key: String,
     #[allow(dead_code)]
     pub name: String,
