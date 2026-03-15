@@ -8,6 +8,7 @@ use axum::routing::get;
 use serde::{Deserialize, Serialize};
 
 use crate::provider::ProviderManager;
+use crate::provider::compatibility::Compatibility;
 
 #[derive(Serialize, Deserialize)]
 struct ApiInfo {
@@ -24,8 +25,10 @@ async fn api_info() -> Json<ApiInfo> {
 
 #[derive(Serialize, Deserialize)]
 struct ApiProvider {
+    key: String,
     name: String,
     baseurl: String,
+    compatibility: Compatibility,
 }
 
 async fn api_config(
@@ -37,8 +40,10 @@ async fn api_config(
             (
                 key.clone(),
                 ApiProvider {
+                    key: provider.key.clone(),
                     name: provider.name.clone(),
                     baseurl: provider.baseurl.as_str().to_owned(),
+                    compatibility: provider.compatibility.clone(),
                 },
             )
         })
@@ -121,7 +126,9 @@ mod tests {
 
         assert_eq!(providers.len(), 1);
         let provider = &providers["test-provider"];
+        assert_eq!(provider.key, "test-provider");
         assert_eq!(provider.name, "test-provider");
         assert_eq!(provider.baseurl, "https://api.example.com/");
+        assert_eq!(provider.compatibility, Default::default());
     }
 }
