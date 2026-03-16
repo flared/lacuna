@@ -10,6 +10,7 @@ use crate::api_type::{ApiType, api_type_for_path};
 use crate::capabilities::Capabilities;
 use crate::http_middleware::{auth, capabilities};
 use crate::inspector::CallbackInspector;
+use crate::inspector::DecodingInspector;
 use crate::inspector::RequestInspector;
 use crate::inspector::stream::InspectorStream;
 use crate::metrics;
@@ -88,6 +89,14 @@ async fn forward_to_provider(
 
     let body = if let Some(api_type_handler) = api_type_handler {
         let inspector = api_type_handler.response_inspector(status_code, &headers);
+        let inspector = if let Some(encoding) = headers
+            .get("content-encoding")
+            .and_then(|s| s.to_str().ok())
+        {
+            DecodingInspector::wrap(inspector, encoding)
+        } else {
+            inspector
+        };
         let inspector = CallbackInspector::new(inspector, move |result| match result {
             Ok(metadata) => metrics::record_response(&request_metadata, metadata),
             Err(e) => warn!("Failed to inspect response: {e}"),
