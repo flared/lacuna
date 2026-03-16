@@ -83,6 +83,7 @@ fn is_event_stream(headers: &http::HeaderMap) -> bool {
         .is_some_and(|ct| ct.starts_with("text/event-stream"))
 }
 
+#[derive(Default)]
 pub(crate) struct AnthropicSseInspector {
     pub(crate) input_tokens: Option<u64>,
     pub(crate) output_tokens: Option<u64>,
