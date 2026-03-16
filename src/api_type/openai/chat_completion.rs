@@ -1,4 +1,4 @@
-use super::super::{ApiTypeHandler, Inspector, MetadataInspector, ResponseMetadata};
+use super::super::{ApiTypeHandler, Inspector, ResponseMetadata, ResponseMetadataInspector};
 use crate::inspector::protocol::ProtocolInspector;
 use crate::inspector::protocol::text::{TextBody, TextProtocol};
 use serde::Deserialize;
@@ -22,7 +22,11 @@ impl ApiTypeHandler for OpenAiChatCompletionHandler {
         "openai_chat_completion"
     }
 
-    fn inspector(&self, _status: u16, _headers: &http::HeaderMap) -> MetadataInspector {
+    fn response_inspector(
+        &self,
+        _status: u16,
+        _headers: &http::HeaderMap,
+    ) -> ResponseMetadataInspector {
         Box::new(ProtocolInspector::new(
             TextProtocol::new(),
             OpenAiChatInspector { metadata: None },
@@ -59,8 +63,8 @@ fn parse_chat_completion(data: &[u8]) -> Result<ResponseMetadata, anyhow::Error>
 mod tests {
     use super::*;
 
-    fn make_inspector() -> MetadataInspector {
-        OpenAiChatCompletionHandler.inspector(200, &http::HeaderMap::new())
+    fn make_inspector() -> ResponseMetadataInspector {
+        OpenAiChatCompletionHandler.response_inspector(200, &http::HeaderMap::new())
     }
 
     #[test]

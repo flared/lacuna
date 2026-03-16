@@ -50,7 +50,7 @@ mod tests {
 
     #[test]
     fn inspect_eventstream_response() {
-        let mut inspector: super::super::super::MetadataInspector =
+        let mut inspector: super::super::super::ResponseMetadataInspector =
             Box::new(ProtocolInspector::new(
                 AmazonEventstreamProtocol::default(),
                 AnthropicSseInspector {

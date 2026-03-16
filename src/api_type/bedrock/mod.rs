@@ -5,7 +5,7 @@ use crate::inspector::protocol::ProtocolInspector;
 use crate::inspector::protocol::amazon_eventstream::AmazonEventstreamProtocol;
 
 use super::anthropic::AnthropicSseInspector;
-use super::{ApiTypeHandler, MetadataInspector};
+use super::{ApiTypeHandler, ResponseMetadataInspector};
 
 pub struct BedrockModelInvokeHandler;
 
@@ -21,7 +21,11 @@ impl ApiTypeHandler for BedrockModelInvokeHandler {
         "bedrock_model_invoke"
     }
 
-    fn inspector(&self, status: u16, headers: &http::HeaderMap) -> MetadataInspector {
+    fn response_inspector(
+        &self,
+        status: u16,
+        headers: &http::HeaderMap,
+    ) -> ResponseMetadataInspector {
         if is_amazon_event_stream(headers) {
             Box::new(ProtocolInspector::new(
                 AmazonEventstreamProtocol::default(),
@@ -31,7 +35,7 @@ impl ApiTypeHandler for BedrockModelInvokeHandler {
                 },
             ))
         } else {
-            headers_inspector::BedrockModelInvokeJsonHandler.inspector(status, headers)
+            headers_inspector::BedrockModelInvokeJsonHandler.response_inspector(status, headers)
         }
     }
 }

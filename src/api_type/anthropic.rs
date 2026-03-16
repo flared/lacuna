@@ -4,7 +4,7 @@ use crate::inspector::protocol::ProtocolInspector;
 use crate::inspector::protocol::sse::{SseEvent, SseProtocol};
 use crate::inspector::protocol::text::{TextBody, TextProtocol};
 
-use super::{ApiTypeHandler, Inspector, MetadataInspector, ResponseMetadata};
+use super::{ApiTypeHandler, Inspector, ResponseMetadata, ResponseMetadataInspector};
 
 #[derive(Debug, Deserialize)]
 struct Usage {
@@ -36,7 +36,11 @@ impl ApiTypeHandler for AnthropicMessagesHandler {
         "anthropic_messages"
     }
 
-    fn inspector(&self, _status: u16, headers: &http::HeaderMap) -> MetadataInspector {
+    fn response_inspector(
+        &self,
+        _status: u16,
+        headers: &http::HeaderMap,
+    ) -> ResponseMetadataInspector {
         if is_event_stream(headers) {
             Box::new(ProtocolInspector::new(
                 SseProtocol::new(),
@@ -135,17 +139,17 @@ fn parse_anthropic_json(data: &[u8]) -> Result<ResponseMetadata, anyhow::Error> 
 mod tests {
     use super::*;
 
-    fn make_json_inspector() -> MetadataInspector {
-        AnthropicMessagesHandler.inspector(200, &http::HeaderMap::new())
+    fn make_json_inspector() -> ResponseMetadataInspector {
+        AnthropicMessagesHandler.response_inspector(200, &http::HeaderMap::new())
     }
 
-    fn make_sse_inspector() -> MetadataInspector {
+    fn make_sse_inspector() -> ResponseMetadataInspector {
         let mut headers = http::HeaderMap::new();
         headers.insert(
             http::header::CONTENT_TYPE,
             "text/event-stream".parse().unwrap(),
         );
-        AnthropicMessagesHandler.inspector(200, &headers)
+        AnthropicMessagesHandler.response_inspector(200, &headers)
     }
 
     #[test]

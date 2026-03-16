@@ -10,6 +10,7 @@ use crate::api_type::{ApiType, api_type_for_path};
 use crate::capabilities::Capabilities;
 use crate::http_middleware::{auth, capabilities};
 use crate::inspector::CallbackInspector;
+use crate::inspector::RequestInspector;
 use crate::inspector::stream::InspectorStream;
 use crate::metrics;
 use crate::provider::{self, ProviderManager};
@@ -39,14 +40,16 @@ async fn forward_to_provider(
         .unwrap_or_default() // empty string: ""
         .to_owned();
 
-    let request_metadata = RequestMetadata {
+    let mut request_metadata = RequestMetadata {
         provider_key: provider.key.clone(),
         api_handler_id: api_type_handler_id,
         user_identity: user,
+        inspected: None,
     };
 
-    metrics::record_request(&request_metadata);
     debug!(%method, %path, "downstream_req");
+
+    let (request_inspector, request) = RequestInspector::new(api_type_handler.as_deref(), request);
 
     let upstream_req = match provider.build_request(request) {
         Ok(r) => r,
@@ -74,10 +77,17 @@ async fn forward_to_provider(
     let headers = upstream_res.headers().clone();
     let status_code = status.as_u16();
 
-    info!(%method, %path, %status, "upstream_resp");
+    request_metadata.inspected = request_inspector.take();
+
+    let model = request_metadata
+        .inspected
+        .as_ref()
+        .and_then(|m| m.model.as_deref());
+    info!(%method, %path, %status, ?model, "upstream_resp");
+    metrics::record_request(&request_metadata);
 
     let body = if let Some(api_type_handler) = api_type_handler {
-        let inspector = api_type_handler.inspector(status_code, &headers);
+        let inspector = api_type_handler.response_inspector(status_code, &headers);
         let inspector = CallbackInspector::new(inspector, move |result| match result {
             Ok(metadata) => metrics::record_response(&request_metadata, metadata),
             Err(e) => warn!("Failed to inspect response: {e}"),
