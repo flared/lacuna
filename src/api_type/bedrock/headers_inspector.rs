@@ -1,8 +1,8 @@
-use super::{ApiTypeHandler, MetadataInspector, ResponseMetadata, StaticInspector};
+use super::super::{ApiTypeHandler, MetadataInspector, ResponseMetadata, StaticInspector};
 
-pub struct BedrockModelInvokeHandler;
+pub struct BedrockModelInvokeJsonHandler;
 
-impl ApiTypeHandler for BedrockModelInvokeHandler {
+impl ApiTypeHandler for BedrockModelInvokeJsonHandler {
     fn id(&self) -> &'static str {
         "bedrock_model_invoke"
     }
@@ -50,7 +50,7 @@ mod tests {
             ("x-amzn-bedrock-input-token-count", "25"),
             ("x-amzn-bedrock-output-token-count", "150"),
         ]);
-        let inspector = BedrockModelInvokeHandler.inspector(200, &headers);
+        let inspector = BedrockModelInvokeJsonHandler.inspector(200, &headers);
         let metadata = inspector.finish().unwrap();
         assert_eq!(metadata.input_tokens, Some(25));
         assert_eq!(metadata.output_tokens, Some(150));
@@ -59,7 +59,7 @@ mod tests {
     #[test]
     fn inspect_response_missing_headers() {
         let headers = http::HeaderMap::new();
-        let inspector = BedrockModelInvokeHandler.inspector(200, &headers);
+        let inspector = BedrockModelInvokeJsonHandler.inspector(200, &headers);
         let metadata = inspector.finish().unwrap();
         assert_eq!(metadata.input_tokens, None);
         assert_eq!(metadata.output_tokens, None);
@@ -68,9 +68,8 @@ mod tests {
     #[test]
     fn inspect_response_invalid_header() {
         let headers = headers_to_map(&[("x-amzn-bedrock-input-token-count", "not_a_number")]);
-        let inspector = BedrockModelInvokeHandler.inspector(200, &headers);
+        let inspector = BedrockModelInvokeJsonHandler.inspector(200, &headers);
         let metadata = inspector.finish().unwrap();
-        // Invalid headers are silently ignored (unwrap_or(None) in inspector())
         assert_eq!(metadata.input_tokens, None);
         assert_eq!(metadata.output_tokens, None);
     }

@@ -61,30 +61,37 @@ fn is_event_stream(headers: &http::HeaderMap) -> bool {
         .is_some_and(|ct| ct.starts_with("text/event-stream"))
 }
 
-struct AnthropicSseInspector {
-    input_tokens: Option<u64>,
-    output_tokens: Option<u64>,
+pub(crate) struct AnthropicSseInspector {
+    pub(crate) input_tokens: Option<u64>,
+    pub(crate) output_tokens: Option<u64>,
 }
 
-impl Inspector<SseEvent> for AnthropicSseInspector {
-    type Output = ResponseMetadata;
-
-    fn feed(&mut self, event: SseEvent) {
-        if let Ok(evt) = serde_json::from_str::<SseEventType>(&event.data) {
+impl AnthropicSseInspector {
+    /// Process a single Anthropic JSON event string.
+    pub(crate) fn process_event_json(&mut self, json: &str) {
+        if let Ok(evt) = serde_json::from_str::<SseEventType>(json) {
             match evt.r#type.as_str() {
                 "message_start" => {
-                    if let Ok(msg) = serde_json::from_str::<MessageStartData>(&event.data) {
+                    if let Ok(msg) = serde_json::from_str::<MessageStartData>(json) {
                         self.input_tokens = msg.message.usage.input_tokens;
                     }
                 }
                 "message_delta" => {
-                    if let Ok(delta) = serde_json::from_str::<AnthropicDataWithUsage>(&event.data) {
+                    if let Ok(delta) = serde_json::from_str::<AnthropicDataWithUsage>(json) {
                         self.output_tokens = delta.usage.output_tokens;
                     }
                 }
                 _ => {}
             }
         }
+    }
+}
+
+impl Inspector<SseEvent> for AnthropicSseInspector {
+    type Output = ResponseMetadata;
+
+    fn feed(&mut self, event: SseEvent) {
+        self.process_event_json(&event.data);
     }
 
     fn finish(self: Box<Self>) -> Result<ResponseMetadata, anyhow::Error> {
