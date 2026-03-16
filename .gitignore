@@ -16,3 +16,6 @@
 /examples/.ruff_cache
 __pycache__
 *.pyc
+
+# Env
+.env

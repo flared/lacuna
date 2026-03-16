@@ -8,9 +8,10 @@ use regex::Regex;
 use std::sync::LazyLock;
 
 pub use crate::inspector::{ByteInspector, Inspector, StaticInspector};
-pub use crate::request_metadata::ResponseMetadata;
+pub use crate::request_metadata::{RequestInspectionMetadata, ResponseMetadata};
 
-pub type MetadataInspector = ByteInspector<ResponseMetadata>;
+pub type ResponseMetadataInspector = ByteInspector<ResponseMetadata>;
+pub type RequestMetadataInspector = ByteInspector<RequestInspectionMetadata>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ApiType {
@@ -29,7 +30,17 @@ pub trait ApiTypeHandler {
     /// Create an inspector for this response.
     /// The inspector pairs a protocol parser with provider-specific metadata extraction.
     /// Defaults to a no-op inspector that returns empty metadata.
-    fn inspector(&self, _status: u16, _headers: &http::HeaderMap) -> MetadataInspector {
+    fn response_inspector(
+        &self,
+        _status: u16,
+        _headers: &http::HeaderMap,
+    ) -> ResponseMetadataInspector {
+        Box::new(StaticInspector::default())
+    }
+
+    /// Create an inspector for this request body.
+    /// Defaults to a no-op inspector that returns empty metadata.
+    fn request_inspector(&self) -> RequestMetadataInspector {
         Box::new(StaticInspector::default())
     }
 }

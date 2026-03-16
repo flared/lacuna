@@ -2,8 +2,8 @@ use axum::body::Body;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use std::sync::Arc;
-use tracing::{debug, info, warn};
+use std::sync::{Arc, Mutex};
+use tracing::{debug, error, info, warn};
 
 use crate::api_type::{ApiType, api_type_for_path};
 
@@ -13,7 +13,7 @@ use crate::inspector::CallbackInspector;
 use crate::inspector::stream::InspectorStream;
 use crate::metrics;
 use crate::provider::{self, ProviderManager};
-use crate::request_metadata::RequestMetadata;
+use crate::request_metadata::{RequestInspectionMetadata, RequestMetadata};
 
 async fn forward_to_provider(
     provider: &provider::Provider,
@@ -39,14 +39,42 @@ async fn forward_to_provider(
         .unwrap_or_default() // empty string: ""
         .to_owned();
 
-    let request_metadata = RequestMetadata {
+    let mut request_metadata = RequestMetadata {
         provider_key: provider.key.clone(),
         api_handler_id: api_type_handler_id,
         user_identity: user,
+        inspected: None,
     };
 
-    metrics::record_request(&request_metadata);
     debug!(%method, %path, "downstream_req");
+
+    // Create a request inspector to extract request metadata.
+    // Result will be stored in `request_inspection_metadata` after the request
+    // has been sent.
+    let request_inspection_metadata: Arc<Mutex<Option<RequestInspectionMetadata>>> =
+        Arc::new(Mutex::new(None));
+
+    let request = if let Some(api_type_handler) = &api_type_handler {
+        let inspector = api_type_handler.request_inspector();
+        let slot = Arc::clone(&request_inspection_metadata);
+        let inspector = CallbackInspector::new(inspector, move |result| match result {
+            Ok(metadata) => {
+                debug!(?metadata, "request_inspection");
+                match slot.lock() {
+                    Ok(mut guard) => {
+                        *guard = Some(metadata.clone());
+                    }
+                    Err(e) => error!("Failed to lock request inspection metadata: {e}"),
+                }
+            }
+            Err(e) => warn!("Failed to inspect request: {e}"),
+        });
+        let (parts, body) = request.into_parts();
+        let stream = InspectorStream::new(body.into_data_stream(), Box::new(inspector));
+        axum::http::Request::from_parts(parts, Body::from_stream(stream))
+    } else {
+        request
+    };
 
     let upstream_req = match provider.build_request(request) {
         Ok(r) => r,
@@ -74,10 +102,23 @@ async fn forward_to_provider(
     let headers = upstream_res.headers().clone();
     let status_code = status.as_u16();
 
-    info!(%method, %path, %status, "upstream_resp");
+    request_metadata.inspected = match request_inspection_metadata.lock() {
+        Ok(mut guard) => guard.take(),
+        Err(e) => {
+            error!("Failed to lock request inspection metadata: {e}");
+            None
+        }
+    };
+
+    let model = request_metadata
+        .inspected
+        .as_ref()
+        .and_then(|m| m.model.as_deref());
+    info!(%method, %path, %status, ?model, "upstream_resp");
+    metrics::record_request(&request_metadata);
 
     let body = if let Some(api_type_handler) = api_type_handler {
-        let inspector = api_type_handler.inspector(status_code, &headers);
+        let inspector = api_type_handler.response_inspector(status_code, &headers);
         let inspector = CallbackInspector::new(inspector, move |result| match result {
             Ok(metadata) => metrics::record_response(&request_metadata, metadata),
             Err(e) => warn!("Failed to inspect response: {e}"),

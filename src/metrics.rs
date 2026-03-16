@@ -22,9 +22,16 @@ pub fn record_request(request_metadata: &RequestMetadata) {
         Some(Identity::LoginUser(email)) => email.clone(),
         _ => String::new(),
     };
+    let model = request_metadata
+        .inspected
+        .as_ref()
+        .and_then(|m| m.model.clone())
+        .unwrap_or_default();
+
     let labels = [
         ("provider", request_metadata.provider_key.clone()),
         ("user", user),
+        ("model", model),
     ];
     metrics::counter!("lacuna_provider_requests_total", &labels).increment(1);
 }
@@ -34,10 +41,16 @@ pub fn record_response(request_metadata: &RequestMetadata, response_metadata: &R
         Some(Identity::LoginUser(email)) => email.clone(),
         _ => String::new(),
     };
+    let model = request_metadata
+        .inspected
+        .as_ref()
+        .and_then(|m| m.model.clone())
+        .unwrap_or_default();
     let labels = [
         ("provider", request_metadata.provider_key.clone()),
         ("handler", request_metadata.api_handler_id.clone()),
         ("user", user),
+        ("model", model),
     ];
     if let Some(tokens) = response_metadata.input_tokens {
         metrics::counter!("lacuna_provider_tokens_input_total", &labels).increment(tokens);

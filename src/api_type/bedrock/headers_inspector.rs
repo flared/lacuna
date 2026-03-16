@@ -1,4 +1,4 @@
-use super::super::{ApiTypeHandler, MetadataInspector, ResponseMetadata, StaticInspector};
+use super::super::{ApiTypeHandler, ResponseMetadata, ResponseMetadataInspector, StaticInspector};
 
 pub struct BedrockModelInvokeJsonHandler;
 
@@ -7,7 +7,11 @@ impl ApiTypeHandler for BedrockModelInvokeJsonHandler {
         "bedrock_model_invoke"
     }
 
-    fn inspector(&self, _status: u16, headers: &http::HeaderMap) -> MetadataInspector {
+    fn response_inspector(
+        &self,
+        _status: u16,
+        headers: &http::HeaderMap,
+    ) -> ResponseMetadataInspector {
         let input_tokens =
             parse_token_header(headers, "x-amzn-bedrock-input-token-count").unwrap_or(None);
         let output_tokens =
@@ -50,7 +54,7 @@ mod tests {
             ("x-amzn-bedrock-input-token-count", "25"),
             ("x-amzn-bedrock-output-token-count", "150"),
         ]);
-        let inspector = BedrockModelInvokeJsonHandler.inspector(200, &headers);
+        let inspector = BedrockModelInvokeJsonHandler.response_inspector(200, &headers);
         let metadata = inspector.finish().unwrap();
         assert_eq!(metadata.input_tokens, Some(25));
         assert_eq!(metadata.output_tokens, Some(150));
@@ -59,7 +63,7 @@ mod tests {
     #[test]
     fn inspect_response_missing_headers() {
         let headers = http::HeaderMap::new();
-        let inspector = BedrockModelInvokeJsonHandler.inspector(200, &headers);
+        let inspector = BedrockModelInvokeJsonHandler.response_inspector(200, &headers);
         let metadata = inspector.finish().unwrap();
         assert_eq!(metadata.input_tokens, None);
         assert_eq!(metadata.output_tokens, None);
@@ -68,7 +72,7 @@ mod tests {
     #[test]
     fn inspect_response_invalid_header() {
         let headers = headers_to_map(&[("x-amzn-bedrock-input-token-count", "not_a_number")]);
-        let inspector = BedrockModelInvokeJsonHandler.inspector(200, &headers);
+        let inspector = BedrockModelInvokeJsonHandler.response_inspector(200, &headers);
         let metadata = inspector.finish().unwrap();
         assert_eq!(metadata.input_tokens, None);
         assert_eq!(metadata.output_tokens, None);
