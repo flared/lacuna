@@ -76,7 +76,7 @@ The provided configuration file may include environment variable substitution us
 }
 ```
 
-**Application Capabilities**
+### Application Capabilities
 
 When `capabilities_header` is set, Lacuna expects a header that follows the Tailscale application capabilities format:
 
