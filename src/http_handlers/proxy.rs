@@ -5,7 +5,7 @@ use axum::response::{IntoResponse, Response};
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 
-use crate::api_type::{ApiType, api_type_for_path};
+use crate::api_type::{ApiType, ApiTypeHandler, api_type_for_path};
 
 use crate::capabilities::Capabilities;
 use crate::http_middleware::{auth, capabilities};
@@ -15,7 +15,7 @@ use crate::inspector::RequestInspector;
 use crate::inspector::stream::InspectorStream;
 use crate::metrics;
 use crate::provider::{self, ProviderManager};
-use crate::request_metadata::RequestMetadata;
+use crate::request_metadata::{RequestMetadata, ResponseMetadata};
 
 async fn forward_to_provider(
     provider: &provider::Provider,
@@ -74,12 +74,9 @@ async fn forward_to_provider(
         }
     };
 
-    let status = upstream_res.status();
-    let headers = upstream_res.headers().clone();
-    let status_code = status.as_u16();
-
     request_metadata.inspected = request_inspector.take();
 
+    let status = upstream_res.status();
     let model = request_metadata
         .inspected
         .as_ref()
@@ -87,31 +84,10 @@ async fn forward_to_provider(
     info!(%method, %path, %status, ?model, "upstream_resp");
     metrics::record_request(&request_metadata);
 
-    let body = if let Some(api_type_handler) = api_type_handler {
-        let inspector = api_type_handler.response_inspector(status_code, &headers);
-        let inspector = if let Some(encoding) = headers
-            .get("content-encoding")
-            .and_then(|s| s.to_str().ok())
-        {
-            DecodingInspector::wrap(inspector, encoding)
-        } else {
-            inspector
-        };
-        let inspector = CallbackInspector::new(inspector, move |result| match result {
-            Ok(metadata) => metrics::record_response(&request_metadata, metadata),
-            Err(e) => warn!("Failed to inspect response: {e}"),
-        });
-        let stream = InspectorStream::new(upstream_res.bytes_stream(), Box::new(inspector));
-        Body::from_stream(stream)
-    } else {
-        Body::from_stream(upstream_res.bytes_stream())
-    };
-
-    let mut builder = Response::builder().status(status_code);
-    for (name, value) in headers.iter() {
-        builder = builder.header(name, value);
-    }
-    builder.body(body).unwrap().into_response()
+    wrap_upstream_response(api_type_handler, upstream_res, move |result| match result {
+        Ok(metadata) => metrics::record_response(&request_metadata, metadata),
+        Err(e) => warn!("Failed to inspect response: {e}"),
+    })
 }
 
 pub async fn provider_proxy_handler(
@@ -137,6 +113,38 @@ pub async fn proxy_handler(
         None => return (StatusCode::NOT_FOUND, "no provider found for api type").into_response(),
     };
     forward_to_provider(provider, Some(&api_type), request).await
+}
+
+fn wrap_upstream_response(
+    api_type_handler: Option<Box<dyn ApiTypeHandler + Send>>,
+    upstream_res: reqwest::Response,
+    on_response: impl FnOnce(&Result<ResponseMetadata, anyhow::Error>) + Send + 'static,
+) -> Response {
+    let status_code = upstream_res.status().as_u16();
+    let headers = upstream_res.headers().clone();
+
+    let body = if let Some(api_type_handler) = api_type_handler {
+        let inspector = api_type_handler.response_inspector(status_code, &headers);
+        let inspector = if let Some(encoding) = headers
+            .get("content-encoding")
+            .and_then(|s| s.to_str().ok())
+        {
+            DecodingInspector::wrap(inspector, encoding)
+        } else {
+            inspector
+        };
+        let inspector = CallbackInspector::new(inspector, on_response);
+        let stream = InspectorStream::new(upstream_res.bytes_stream(), Box::new(inspector));
+        Body::from_stream(stream)
+    } else {
+        Body::from_stream(upstream_res.bytes_stream())
+    };
+
+    let mut builder = Response::builder().status(status_code);
+    for (name, value) in headers.iter() {
+        builder = builder.header(name, value);
+    }
+    builder.body(body).unwrap().into_response()
 }
 
 fn capabilities_forbidden_response(error: &str, capabilities: &Capabilities) -> Response {
