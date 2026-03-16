@@ -18,3 +18,24 @@ pub struct RequestMetadata {
     pub user_identity: Option<Identity>,
     pub inspected: Option<RequestInspectionMetadata>,
 }
+
+impl RequestMetadata {
+    pub fn labels(&self) -> [(&'static str, String); 4] {
+        let user = match &self.user_identity {
+            Some(Identity::LoginUser(email)) => email.clone(),
+            _ => String::new(),
+        };
+        let model = self
+            .inspected
+            .as_ref()
+            .and_then(|m| m.model.clone())
+            .unwrap_or_default();
+
+        [
+            ("provider", self.provider_key.clone()),
+            ("handler", self.api_handler_id.clone()),
+            ("user", user),
+            ("model", model),
+        ]
+    }
+}

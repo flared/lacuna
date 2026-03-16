@@ -73,7 +73,7 @@ mod tests {
         let body = get_metrics_body(app).await;
         assert!(
             body.contains(
-                r#"lacuna_provider_requests_total{provider="test-anon",user="",model=""} 1"#
+                r#"lacuna_provider_requests_total{provider="test-anon",handler="openai_chat_completion",user="",model=""} 1"#
             ),
             "expected anonymous request metric line, got:\n{body}"
         );
@@ -175,7 +175,7 @@ mod tests {
         let body = get_metrics_body(app).await;
         assert!(
             body.contains(
-                r#"lacuna_provider_requests_total{provider="test-identified",user="alice@example.com",model=""} 1"#
+                r#"lacuna_provider_requests_total{provider="test-identified",handler="openai_chat_completion",user="alice@example.com",model=""} 1"#
             ),
             "expected identified request metric line, got:\n{body}"
         );
