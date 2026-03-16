@@ -23,9 +23,11 @@ impl RequestInspector {
             return (Self { slot: None }, request);
         };
 
+        let (parts, body) = request.into_parts();
+
         let slot: Arc<Mutex<Option<RequestInspectionMetadata>>> = Arc::new(Mutex::new(None));
         let slot_clone = Arc::clone(&slot);
-        let inspector = handler.request_inspector();
+        let inspector = handler.request_inspector(&parts);
 
         let inspector = CallbackInspector::new(inspector, move |result| {
             if let Ok(metadata) = result
@@ -34,8 +36,6 @@ impl RequestInspector {
                 *guard = Some(metadata.clone());
             }
         });
-
-        let (parts, body) = request.into_parts();
         let stream = InspectorStream::new(body.into_data_stream(), Box::new(inspector));
         let request = axum::http::Request::from_parts(parts, Body::from_stream(stream));
 

@@ -40,7 +40,7 @@ pub trait ApiTypeHandler {
 
     /// Create an inspector for this request body.
     /// Defaults to a no-op inspector that returns empty metadata.
-    fn request_inspector(&self) -> RequestMetadataInspector {
+    fn request_inspector(&self, _parts: &http::request::Parts) -> RequestMetadataInspector {
         Box::new(StaticInspector::default())
     }
 }
