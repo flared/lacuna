@@ -15,15 +15,15 @@ function toggleTheme() {
 }
 
 const items = [
-  { title: "Configuration", to: "/" },
+  { title: "Providers", to: "/" },
   { title: "Metrics", to: "/metrics" },
+  { title: "Configuration", to: "/configuration" },
   { title: "About", to: "/about" },
 ];
 </script>
 
 <template>
   <v-app-bar :color="theme.global.current.value.dark ? 'surface' : 'primary'">
-    <!-- eslint-disable-next-line vue/no-restricted-static-attribute -->
     <v-toolbar-title class="toolbar-title"> Lacuna </v-toolbar-title>
     <v-btn v-for="item in items" :key="item.to" :to="item.to" variant="text">
       {{ item.title }}
