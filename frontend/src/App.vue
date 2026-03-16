@@ -7,7 +7,7 @@ import BreadcrumbNav from "@/components/BreadcrumbNav.vue";
   <v-app>
     <TopBar />
     <v-main>
-      <v-container>
+      <v-container class="pt-0">
         <BreadcrumbNav />
         <router-view />
       </v-container>
