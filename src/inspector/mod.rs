@@ -1,9 +1,11 @@
 pub mod callback;
 pub mod protocol;
+pub mod request_inspector;
 pub mod static_inspector;
 pub mod stream;
 
 pub use callback::CallbackInspector;
+pub use request_inspector::RequestInspector;
 pub use static_inspector::StaticInspector;
 
 /// Incremental inspector that accumulates output from fed frames.
