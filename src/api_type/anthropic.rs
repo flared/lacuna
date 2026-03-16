@@ -3,8 +3,12 @@ use serde::Deserialize;
 use crate::inspector::protocol::ProtocolInspector;
 use crate::inspector::protocol::sse::{SseEvent, SseProtocol};
 use crate::inspector::protocol::text::{TextBody, TextProtocol};
+use crate::request_metadata::RequestInspectionMetadata;
 
-use super::{ApiTypeHandler, Inspector, ResponseMetadata, ResponseMetadataInspector};
+use super::{
+    ApiTypeHandler, Inspector, RequestMetadataInspector, ResponseMetadata,
+    ResponseMetadataInspector,
+};
 
 #[derive(Debug, Deserialize)]
 struct Usage {
@@ -29,11 +33,25 @@ struct MessageStartData {
     message: AnthropicDataWithUsage,
 }
 
+#[derive(Debug, Deserialize)]
+struct AnthropicRequestBody {
+    model: Option<String>,
+}
+
 pub struct AnthropicMessagesHandler;
 
 impl ApiTypeHandler for AnthropicMessagesHandler {
     fn id(&self) -> &'static str {
         "anthropic_messages"
+    }
+
+    fn request_inspector(&self, _parts: &http::request::Parts) -> RequestMetadataInspector {
+        Box::new(ProtocolInspector::new(
+            TextProtocol::new(),
+            AnthropicRequestInspector {
+                metadata: RequestInspectionMetadata::default(),
+            },
+        ))
     }
 
     fn response_inspector(
@@ -127,6 +145,25 @@ impl Inspector<TextBody> for AnthropicJsonInspector {
     }
 }
 
+struct AnthropicRequestInspector {
+    metadata: RequestInspectionMetadata,
+}
+
+impl Inspector<TextBody> for AnthropicRequestInspector {
+    type Output = RequestInspectionMetadata;
+
+    fn feed(&mut self, body: TextBody) {
+        match serde_json::from_slice::<AnthropicRequestBody>(&body.data) {
+            Ok(b) => self.metadata.model = b.model,
+            Err(e) => tracing::error!("Failed to parse Anthropic request body: {e}"),
+        }
+    }
+
+    fn finish(self: Box<Self>) -> Result<RequestInspectionMetadata, anyhow::Error> {
+        Ok(self.metadata)
+    }
+}
+
 fn parse_anthropic_json(data: &[u8]) -> Result<ResponseMetadata, anyhow::Error> {
     let parsed = serde_json::from_slice::<AnthropicDataWithUsage>(data)?;
     Ok(ResponseMetadata {
@@ -139,6 +176,15 @@ fn parse_anthropic_json(data: &[u8]) -> Result<ResponseMetadata, anyhow::Error> 
 mod tests {
     use super::*;
 
+    fn make_request_inspector() -> RequestMetadataInspector {
+        let parts = http::Request::get("http://localhost/v1/messages")
+            .body(())
+            .unwrap()
+            .into_parts()
+            .0;
+        AnthropicMessagesHandler.request_inspector(&parts)
+    }
+
     fn make_json_inspector() -> ResponseMetadataInspector {
         AnthropicMessagesHandler.response_inspector(200, &http::HeaderMap::new())
     }
@@ -150,6 +196,39 @@ mod tests {
             "text/event-stream".parse().unwrap(),
         );
         AnthropicMessagesHandler.response_inspector(200, &headers)
+    }
+
+    #[test]
+    fn inspect_request_model() {
+        let body = br#"{"model": "claude-sonnet-4-20250514", "max_tokens": 1024, "messages": [{"role": "user", "content": "Hi"}]}"#;
+        let mut inspector = make_request_inspector();
+        inspector.feed(body);
+        let metadata = inspector.finish().unwrap();
+        assert_eq!(metadata.model, Some("claude-sonnet-4-20250514".to_owned()));
+    }
+
+    #[test]
+    fn inspect_request_no_model() {
+        let body = br#"{"max_tokens": 1024, "messages": []}"#;
+        let mut inspector = make_request_inspector();
+        inspector.feed(body);
+        let metadata = inspector.finish().unwrap();
+        assert_eq!(metadata.model, None);
+    }
+
+    #[test]
+    fn inspect_request_invalid_json() {
+        let mut inspector = make_request_inspector();
+        inspector.feed(b"not json");
+        let metadata = inspector.finish().unwrap();
+        assert_eq!(metadata.model, None);
+    }
+
+    #[test]
+    fn inspect_request_empty_body() {
+        let inspector = make_request_inspector();
+        let metadata = inspector.finish().unwrap();
+        assert_eq!(metadata.model, None);
     }
 
     #[test]
