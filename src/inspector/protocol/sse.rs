@@ -16,17 +16,28 @@ pub struct SseEvent {
     pub retry: Option<u64>,
 }
 
-/// Sans-IO spec-compliant SSE protocol parser.
-/// Parses an SSE byte stream and emits `SseEvent` frames per the SSE specification.
+/// State for parsing the event stream after the BOM check is done.
 #[derive(Debug)]
-pub struct SseProtocol {
+pub struct EventStreamParsingState {
     line_buf: BytesMut,
     data_buf: String,
     event_type_buf: String,
     last_event_id_buf: String,
     retry_buf: Option<u64>,
     has_data: bool,
-    bom_checked: bool,
+}
+
+/// Sans-IO spec-compliant SSE protocol parser.
+/// Parses an SSE byte stream and emits `SseEvent` frames per the SSE specification.
+///
+/// Starts in `BomParsing` to check for a leading UTF-8 BOM, then permanently
+/// transitions to `EventStreamParsing` for the rest of the stream.
+#[derive(Debug)]
+pub enum SseProtocol {
+    /// Initial state: buffering bytes until BOM decision can be made.
+    BomParsing(BytesMut),
+    /// Normal parsing state — BOM already handled.
+    EventStreamParsing(EventStreamParsingState),
 }
 
 impl Default for SseProtocol {
@@ -35,38 +46,86 @@ impl Default for SseProtocol {
     }
 }
 
+
+impl Protocol for SseProtocol {
+    type Output = SseEvent;
+
+    fn feed(&mut self, chunk: &[u8], on_output: &mut dyn FnMut(SseEvent)) {
+        match self {
+            Self::BomParsing(buf) => {
+                buf.extend_from_slice(chunk);
+                *self = Self::parse_bom(std::mem::take(buf), false);
+            }
+            Self::EventStreamParsing(state) => {
+                state.line_buf.extend_from_slice(chunk);
+            }
+        }
+
+        if let Self::EventStreamParsing(state) = self {
+            state.parse_events(false, on_output);
+        }
+    }
+
+    fn finish(&mut self, on_output: &mut dyn FnMut(SseEvent)) {
+        if let Self::BomParsing(buf) = self {
+            *self = Self::parse_bom(std::mem::take(buf), true);
+        }
+
+        let Self::EventStreamParsing(state) = self else {
+            unreachable!();
+        };
+        state.parse_events(true, on_output);
+        state.clear();
+    }
+}
+
+
 impl SseProtocol {
     pub fn new() -> Self {
+        Self::BomParsing(BytesMut::new())
+    }
+
+    /// Consume the BOM buffer and return the next state.
+    /// Returns `BomParsing` if more data is needed, `EventStreamParsing` otherwise.
+    fn parse_bom(mut buf: BytesMut, at_eof: bool) -> Self {
+        if !buf.is_empty() && buf[0] == 0xEF {
+            if !at_eof && buf.len() < 3 {
+                return Self::BomParsing(buf); // need more data
+            }
+            if buf[1] == 0xBB && buf[2] == 0xBF {
+                let _ = buf.split_to(3);
+            }
+        }
+        Self::EventStreamParsing(EventStreamParsingState::new(buf))
+    }
+}
+
+impl EventStreamParsingState {
+    fn new(line_buf: BytesMut) -> Self {
         Self {
-            line_buf: BytesMut::new(),
+            line_buf,
             data_buf: String::new(),
             event_type_buf: String::new(),
             last_event_id_buf: String::new(),
             retry_buf: None,
             has_data: false,
-            bom_checked: false,
         }
     }
 
-    /// Strip UTF-8 BOM if present at the start of the stream.
-    /// Returns false if we need more data to decide.
-    fn check_bom(&mut self) -> bool {
-        if self.bom_checked {
-            return true;
-        }
-        if self.line_buf.is_empty() {
-            return true;
-        }
-        if self.line_buf[0] == 0xEF {
-            if self.line_buf.len() < 3 {
-                return false; // need more data
-            }
-            if self.line_buf[1] == 0xBB && self.line_buf[2] == 0xBF {
-                let _ = self.line_buf.split_to(3);
+
+    fn parse_events(&mut self, at_eof: bool, on_output: &mut dyn FnMut(SseEvent)) {
+        loop {
+            let Some((line_end, consume_to)) = Self::find_line_end(&self.line_buf, at_eof) else {
+                break;
+            };
+
+            let line_bytes = self.line_buf.split_to(consume_to);
+            let line = &line_bytes[..line_end];
+
+            if let Ok(s) = std::str::from_utf8(line) {
+                self.process_line(s, on_output);
             }
         }
-        self.bom_checked = true;
-        true
     }
 
     /// Find the end of a line in the buffer.
@@ -103,7 +162,6 @@ impl SseProtocol {
         }
 
         if line.starts_with(':') {
-            // Comment, ignore
             return;
         }
 
@@ -140,13 +198,12 @@ impl SseProtocol {
                     self.retry_buf = Some(v);
                 }
             }
-            _ => {} // unknown field, ignore
+            _ => {}
         }
     }
 
     fn dispatch_event(&mut self, on_output: &mut dyn FnMut(SseEvent)) {
         if !self.has_data {
-            // No data field seen; reset per-event buffers but don't emit
             self.event_type_buf.clear();
             self.retry_buf = None;
             return;
@@ -170,47 +227,7 @@ impl SseProtocol {
         on_output(event);
     }
 
-    fn process_lines(&mut self, at_eof: bool, on_output: &mut dyn FnMut(SseEvent)) {
-        loop {
-            let Some((line_end, consume_to)) = Self::find_line_end(&self.line_buf, at_eof) else {
-                break;
-            };
-
-            let line_bytes = self.line_buf.split_to(consume_to);
-            let line = &line_bytes[..line_end];
-
-            if let Ok(s) = std::str::from_utf8(line) {
-                self.process_line(s, on_output);
-            }
-            // Invalid UTF-8 lines are silently ignored
-        }
-    }
-}
-
-impl Protocol for SseProtocol {
-    type Output = SseEvent;
-
-    fn feed(&mut self, chunk: &[u8], on_output: &mut dyn FnMut(SseEvent)) {
-        self.line_buf.extend_from_slice(chunk);
-
-        if !self.check_bom() {
-            return; // need more data for BOM check
-        }
-
-        self.process_lines(false, on_output);
-    }
-
-    fn finish(&mut self, on_output: &mut dyn FnMut(SseEvent)) {
-        if !self.check_bom() {
-            self.bom_checked = true;
-        }
-
-        // Process remaining bytes as final lines (treat trailing \r as line end).
-        // Blank lines encountered here will still dispatch completed events.
-        // Per spec, the final incomplete event (no trailing blank line) is dropped.
-        self.process_lines(true, on_output);
-
-        // Clear all state — any incomplete event is dropped
+    fn clear(&mut self) {
         self.line_buf.clear();
         self.data_buf.clear();
         self.event_type_buf.clear();
@@ -331,7 +348,6 @@ mod tests {
         assert!(events.is_empty());
     }
 
-    // Multi-line data concatenation
     #[test]
     fn multi_line_data() {
         let mut protocol = SseProtocol::new();
@@ -342,7 +358,6 @@ mod tests {
         assert_eq!(events, vec!["line1\nline2\nline3"]);
     }
 
-    // Comment handling
     #[test]
     fn comments_are_ignored() {
         let mut protocol = SseProtocol::new();
@@ -353,7 +368,6 @@ mod tests {
         assert_eq!(events, vec!["hello"]);
     }
 
-    // event type field
     #[test]
     fn event_type_field() {
         let mut protocol = SseProtocol::new();
@@ -370,7 +384,6 @@ mod tests {
         assert_eq!(events[0].event_type, "message");
     }
 
-    // id field
     #[test]
     fn id_field_persists_across_events() {
         let mut protocol = SseProtocol::new();
@@ -388,11 +401,9 @@ mod tests {
             &[b"id: abc\ndata: first\n\nid: x\0y\ndata: second\n\n"],
         );
         assert_eq!(events[0].last_event_id, "abc");
-        // null in id is rejected, so last_event_id stays "abc"
         assert_eq!(events[1].last_event_id, "abc");
     }
 
-    // retry field
     #[test]
     fn retry_field() {
         let mut protocol = SseProtocol::new();
@@ -414,7 +425,6 @@ mod tests {
         assert_eq!(events[0].retry, None);
     }
 
-    // CR-only line endings
     #[test]
     fn cr_only_line_endings() {
         let mut protocol = SseProtocol::new();
@@ -422,7 +432,6 @@ mod tests {
         assert_eq!(events, vec!["hello", "world"]);
     }
 
-    // BOM stripping
     #[test]
     fn bom_stripping() {
         let mut protocol = SseProtocol::new();
@@ -439,7 +448,6 @@ mod tests {
         assert_eq!(events, vec!["hello"]);
     }
 
-    // data:value (no space after colon)
     #[test]
     fn data_no_space_after_colon() {
         let mut protocol = SseProtocol::new();
@@ -447,16 +455,13 @@ mod tests {
         assert_eq!(events, vec!["hello"]);
     }
 
-    // Field with no colon
     #[test]
     fn field_no_colon_treated_as_empty_value() {
         let mut protocol = SseProtocol::new();
         let events = collect_data(&mut protocol, &[b"data\n\n"]);
-        // "data" with no colon => field "data", value ""
         assert_eq!(events, vec![""]);
     }
 
-    // Event with no data lines is not dispatched
     #[test]
     fn event_without_data_not_dispatched() {
         let mut protocol = SseProtocol::new();
@@ -464,7 +469,6 @@ mod tests {
         assert_eq!(events, vec!["real"]);
     }
 
-    // event_type resets between events
     #[test]
     fn event_type_resets_between_events() {
         let mut protocol = SseProtocol::new();
@@ -476,7 +480,6 @@ mod tests {
         assert_eq!(events[1].event_type, "message");
     }
 
-    // Mixed line endings
     #[test]
     fn mixed_line_endings() {
         let mut protocol = SseProtocol::new();
