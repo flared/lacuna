@@ -46,10 +46,7 @@ impl ApiTypeHandler for BedrockModelInvokeHandler {
         if is_amazon_event_stream(headers) {
             Box::new(ProtocolInspector::new(
                 AmazonEventstreamProtocol::default(),
-                AnthropicSseInspector {
-                    input_tokens: None,
-                    output_tokens: None,
-                },
+                AnthropicSseInspector::default(),
             ))
         } else {
             headers_inspector::BedrockModelInvokeJsonHandler.response_inspector(status, headers)
