@@ -11,7 +11,6 @@ use crate::capabilities::{Capabilities, MatchedModel};
 use crate::http_middleware::{auth, capabilities, user_agent};
 use crate::inspector::CallbackInspector;
 use crate::inspector::DecodingInspector;
-use crate::inspector::RequestInspector;
 use crate::inspector::stream::InspectorStream;
 use crate::metrics;
 use crate::provider::{self, ProviderManager};
@@ -33,17 +32,8 @@ async fn forward_to_provider(
 async fn try_forward_to_provider(
     provider: &provider::Provider,
     api_type: Option<&ApiType>,
-    request: axum::extract::Request,
+    mut request: axum::extract::Request,
 ) -> anyhow::Result<Response> {
-    if let Some(caps) = capabilities::get_capabilities(&request)
-        && !caps.is_allowed(
-            &provider.key,
-            &MatchedModel::None, // TODO(aviau): Actually pass the model.
-        )
-    {
-        return capabilities_forbidden_response("request not allowed by capabilities", &caps);
-    }
-
     let method = request.method().to_owned();
     let path = request.uri().path().to_owned();
     let user = auth::get_caller_identity(&request);
@@ -55,17 +45,39 @@ async fn try_forward_to_provider(
         .unwrap_or_default() // empty string: ""
         .to_owned();
 
-    let mut request_metadata = RequestMetadata {
+    // Inspect the request body to extract metadata
+    let request_inspection_metadata = match api_type_handler.as_ref() {
+        Some(handler) => {
+            let (result, rebuilt_request) = handler.inspect_request(request).await;
+            request = rebuilt_request;
+            result
+                .inspect_err(|e| warn!("Failed to inspect request: {e}"))
+                .unwrap_or_default()
+        }
+        None => Default::default(),
+    };
+
+    let matched_model = match request_inspection_metadata.model.as_deref() {
+        Some(model) => MatchedModel::Some(model),
+        None if api_type_handler.is_some() => MatchedModel::Unknown,
+        None => MatchedModel::None,
+    };
+
+    if let Some(caps) = capabilities::get_capabilities(&request)
+        && !caps.is_allowed(&provider.key, &matched_model)
+    {
+        return capabilities_forbidden_response("request not allowed by capabilities", &caps);
+    }
+
+    let request_metadata = RequestMetadata {
         provider_key: provider.key.clone(),
         api_handler_id: api_type_handler_id,
         user_identity: user,
         user_agent,
-        inspected: None,
+        inspected: request_inspection_metadata,
     };
 
     debug!(%method, %path, "downstream_req");
-
-    let (request_inspector, request) = RequestInspector::new(api_type_handler.as_deref(), request);
 
     let upstream_req = provider
         .build_request(request)
@@ -76,13 +88,8 @@ async fn try_forward_to_provider(
         .await
         .map_err(|e| anyhow::anyhow!("upstream request failed: {e}"))?;
 
-    request_metadata.inspected = request_inspector.take();
-
     let status = upstream_res.status();
-    let model = request_metadata
-        .inspected
-        .as_ref()
-        .and_then(|m| m.model.as_deref());
+    let model = request_metadata.inspected.model.as_deref();
     info!(%method, %path, %status, ?model, "upstream_resp");
     metrics::record_request(&request_metadata);
 
@@ -120,7 +127,7 @@ pub async fn proxy_handler(
 }
 
 fn wrap_upstream_response(
-    api_type_handler: Option<Box<dyn ApiTypeHandler + Send>>,
+    api_type_handler: Option<Box<dyn ApiTypeHandler + Send + Sync>>,
     upstream_res: reqwest::Response,
     on_response: impl FnOnce(&Result<ResponseMetadata, anyhow::Error>) + Send + 'static,
 ) -> Response {
@@ -324,7 +331,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri("/myprovider/endpoint")
+                    .uri("/myprovider/model/us.anthropic.claude-sonnet-4-5/invoke")
                     .body(Body::from("test"))
                     .unwrap(),
             )
@@ -346,14 +353,17 @@ mod tests {
         // Request with the capabilities header granting access — should succeed.
         let caps_header = serde_json::json!({
             "flare.io/cap/lacuna": [
-                {"providers": ["myprovider"] }
+                {
+                    "providers": ["myprovider"],
+                    "models": ["us.anthropic.claude-*"]
+                }
             ]
         });
         let response = app
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri("/myprovider/endpoint")
+                    .uri("/myprovider/model/us.anthropic.claude-sonnet-4-5/invoke")
                     .header("Tailscale-App-Capabilities", caps_header.to_string())
                     .body(Body::from("test"))
                     .unwrap(),

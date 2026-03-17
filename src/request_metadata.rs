@@ -18,7 +18,7 @@ pub struct RequestMetadata {
     pub api_handler_id: String,
     pub user_identity: Option<Identity>,
     pub user_agent: Option<UserAgentMetadata>,
-    pub inspected: Option<RequestInspectionMetadata>,
+    pub inspected: RequestInspectionMetadata,
 }
 
 impl RequestMetadata {
@@ -27,11 +27,7 @@ impl RequestMetadata {
             Some(Identity::LoginUser(email)) => email.clone(),
             _ => String::new(),
         };
-        let model = self
-            .inspected
-            .as_ref()
-            .and_then(|m| m.model.clone())
-            .unwrap_or_default();
+        let model = self.inspected.model.clone().unwrap_or_default();
         let user_agent = self
             .user_agent
             .as_ref()

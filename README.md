@@ -83,11 +83,18 @@ When `capabilities_header` is set, Lacuna expects a header that follows the Tail
 ```json
 {
   "flare.io/cap/lacuna": [
-      { "providers": ["myprovider", "otherprovider"] }
-      { "providers": ["prefix-*"] }
+      { "providers": ["firstprovider", "secondprovider"] },
+      { "providers": ["thirdprovider-*"], "models": ["model-1"] }
   ]
 }
 ```
+
+Notes:
+- In the above example, the user may:
+  * Use all models of `firstprovider` and `secondprovider`.
+  * Use `model-1` in any provider that starts with `thirdprovider-`.
+- Providers and models may contain glob patterns.
+- Empty lists and omited values default to `["*"]`.
 
 More on Tailscale application capabilities:
 - [Tailscale application capabilities documentation](https://tailscale.com/docs/features/access-control/grants/grants-app-capabilities)
