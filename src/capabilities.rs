@@ -62,7 +62,7 @@ impl Capabilities {
             let model_matches = c.models.is_empty()
                 || match model {
                     MatchedModel::Unknown => {
-                        // We failed to identity the model.
+                        // We failed to identify the model.
                         // The best we can do is check if any model is allowed.
                         c.models.iter().any(|p| p.matches(""))
                     }
