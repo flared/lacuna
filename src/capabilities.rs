@@ -23,6 +23,12 @@ pub struct Capability {
         deserialize_with = "crate::serde_utils::deserialize_patterns"
     )]
     pub models: Vec<glob::Pattern>,
+
+    #[serde(
+        serialize_with = "crate::serde_utils::serialize_patterns",
+        deserialize_with = "crate::serde_utils::deserialize_patterns"
+    )]
+    pub user_agents: Vec<glob::Pattern>,
 }
 
 impl Capabilities {
@@ -46,6 +52,7 @@ impl From<Capabilities> for crate::authorization::Authorization {
                 .map(|c| crate::authorization::Rule {
                     providers: c.providers,
                     models: c.models,
+                    user_agents: c.user_agents,
                 })
                 .collect(),
         }
@@ -98,13 +105,14 @@ mod tests {
 
     #[test]
     fn test_capability_deserialize() {
-        let json = r#"{"providers": ["myprovider", "prefix-*"], "models": ["claude-*"]}"#;
+        let json = r#"{"providers": ["myprovider", "prefix-*"], "models": ["claude-*"], "user_agents": ["python-*"]}"#;
         let capability: Capability = serde_json::from_str(json).unwrap();
         assert_eq!(
             capability,
             Capability {
                 providers: vec![pattern("myprovider"), pattern("prefix-*")],
                 models: vec![pattern("claude-*")],
+                user_agents: vec![pattern("python-*")],
             },
         );
     }
@@ -118,6 +126,7 @@ mod tests {
             Capability {
                 providers: vec![pattern("myprovider")],
                 models: vec![],
+                user_agents: vec![],
             },
         );
     }
@@ -139,6 +148,7 @@ mod tests {
         let capability = Capability {
             providers: vec![pattern("myprovider"), pattern("prefix-*")],
             models: vec![pattern("claude-*")],
+            user_agents: vec![pattern("python-*")],
         };
         let json = serde_json::to_value(&capability).unwrap();
         assert_eq!(
@@ -146,6 +156,7 @@ mod tests {
             serde_json::json!({
                 "providers": ["myprovider", "prefix-*"],
                 "models": ["claude-*"],
+                "user_agents": ["python-*"],
             }),
         );
     }
@@ -154,7 +165,7 @@ mod tests {
     fn parse_valid_capabilities() {
         let json = r#"{
             "flare.io/cap/lacuna": [
-                {"providers": ["firstprovider"], "models": ["claude-*"]},
+                {"providers": ["firstprovider"], "models": ["claude-*"], "user_agents": ["python-*"]},
                 {"providers": ["secondprofider", "thirdprovider"], "models": ["gpt-*"]}
             ]
         }"#;
@@ -165,10 +176,12 @@ mod tests {
                 Capability {
                     providers: vec![pattern("firstprovider")],
                     models: vec![pattern("claude-*")],
+                    user_agents: vec![pattern("python-*")],
                 },
                 Capability {
                     providers: vec![pattern("secondprofider"), pattern("thirdprovider")],
                     models: vec![pattern("gpt-*")],
+                    user_agents: vec![],
                 },
             ]),
         );
@@ -190,10 +203,12 @@ mod tests {
                 Capability {
                     providers: vec![pattern("firstprovider")],
                     models: vec![pattern("claude-*")],
+                    user_agents: vec![],
                 },
                 Capability {
                     providers: vec![pattern("secondprofider")],
                     models: vec![],
+                    user_agents: vec![],
                 },
             ]),
         );
@@ -224,6 +239,7 @@ mod tests {
             Capabilities::from_capabilities(vec![Capability {
                 providers: vec![pattern("🐿️")],
                 models: vec![],
+                user_agents: vec![],
             },]),
         );
     }

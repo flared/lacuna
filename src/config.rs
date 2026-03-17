@@ -46,8 +46,12 @@ pub struct Provider {
     )]
     pub models: Vec<glob::Pattern>,
 
-    #[serde(default)]
-    pub user_agents: Vec<String>,
+    #[serde(
+        default,
+        serialize_with = "crate::serde_utils::serialize_patterns",
+        deserialize_with = "crate::serde_utils::deserialize_patterns"
+    )]
+    pub user_agents: Vec<glob::Pattern>,
 
     #[serde(default)]
     pub apikey: String,
@@ -159,7 +163,10 @@ mod tests {
                 glob::Pattern::new("gpt-4o-mini").unwrap()
             ]
         );
-        assert_eq!(openai.user_agents, vec!["claude-code"]);
+        assert_eq!(
+            openai.user_agents,
+            vec![glob::Pattern::new("claude-code").unwrap()]
+        );
         assert_eq!(openai.apikey, "sk-test");
         assert_eq!(openai.authorization, Authorization::Bearer);
         assert!(openai.compatibility.openai_chat);

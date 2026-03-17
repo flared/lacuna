@@ -61,7 +61,7 @@ pub struct Provider {
     pub name: String,
     pub baseurl: reqwest::Url,
     pub models: Vec<glob::Pattern>,
-    pub user_agents: Vec<String>,
+    pub user_agents: Vec<glob::Pattern>,
     pub authorizer: Authorization,
     client: reqwest::Client,
     headers: HashMap<String, String>,
@@ -77,6 +77,7 @@ impl Provider {
             rules: vec![Rule {
                 providers: vec![],
                 models: config.models.clone(),
+                user_agents: config.user_agents.clone(),
             }],
         };
         Ok(Self {

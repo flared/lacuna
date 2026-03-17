@@ -4,6 +4,7 @@ use crate::request_metadata::RequestMetadata;
 pub struct Rule {
     pub providers: Vec<glob::Pattern>,
     pub models: Vec<glob::Pattern>,
+    pub user_agents: Vec<glob::Pattern>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -14,17 +15,24 @@ pub struct Authorization {
 impl Authorization {
     pub fn is_allowed(&self, request_metadata: &RequestMetadata) -> bool {
         let provider = &request_metadata.provider_key;
-        let model = request_metadata.inspected.model.as_deref();
+        let user_agent = request_metadata
+            .user_agent
+            .as_ref()
+            .map(|ua| ua.normalized.as_str());
+
         self.rules.iter().any(|rule| {
-            let provider_matches =
-                rule.providers.is_empty() || rule.providers.iter().any(|p| p.matches(provider));
-            let model_matches = rule.models.is_empty()
-                || match model {
-                    None => rule.models.iter().any(|p| p.matches("")),
-                    Some(m) => rule.models.iter().any(|p| p.matches(m)),
-                };
-            provider_matches && model_matches
+            Self::check_values(&rule.providers, Some(provider))
+                && Self::check_values(&rule.models, request_metadata.inspected.model.as_deref())
+                && Self::check_values(&rule.user_agents, user_agent)
         })
+    }
+
+    fn check_values(rule_values: &[glob::Pattern], value: Option<&str>) -> bool {
+        rule_values.is_empty()
+            || match value {
+                None => rule_values.iter().any(|p| p.matches("")),
+                Some(m) => rule_values.iter().any(|p| p.matches(m)),
+            }
     }
 
     pub fn deny_all() -> Self {
@@ -45,6 +53,15 @@ mod tests {
         Rule {
             providers: providers.iter().map(|s| pattern(s)).collect(),
             models: models.iter().map(|s| pattern(s)).collect(),
+            user_agents: vec![],
+        }
+    }
+
+    fn rule_with_user_agents(providers: &[&str], models: &[&str], user_agents: &[&str]) -> Rule {
+        Rule {
+            providers: providers.iter().map(|s| pattern(s)).collect(),
+            models: models.iter().map(|s| pattern(s)).collect(),
+            user_agents: user_agents.iter().map(|s| pattern(s)).collect(),
         }
     }
 
@@ -57,6 +74,19 @@ mod tests {
             inspected: RequestInspectionMetadata {
                 model: model.map(|m| m.to_string()),
             },
+        }
+    }
+
+    fn metadata_with_user_agent(provider: &str, user_agent: Option<&str>) -> RequestMetadata {
+        RequestMetadata {
+            provider_key: provider.to_string(),
+            api_handler_id: String::new(),
+            user_identity: None,
+            user_agent: user_agent.map(|ua| crate::user_agent::UserAgentMetadata {
+                raw: ua.to_string(),
+                normalized: ua.to_string(),
+            }),
+            inspected: RequestInspectionMetadata::default(),
         }
     }
 
@@ -104,5 +134,38 @@ mod tests {
         let auth = Authorization::deny_all();
         assert!(!auth.is_allowed(&metadata("anything", None)));
         assert!(!auth.is_allowed(&metadata("anything", Some("model"))));
+    }
+
+    #[test]
+    fn test_is_allowed_user_agent() {
+        let auth = Authorization {
+            rules: vec![
+                rule_with_user_agents(&["provider-a"], &[], &["claude-code", "cursor"]),
+                rule_with_user_agents(&["provider-b"], &[], &["*"]),
+            ],
+        };
+
+        // Allowed user agents
+        assert!(auth.is_allowed(&metadata_with_user_agent("provider-a", Some("claude-code"))));
+        assert!(auth.is_allowed(&metadata_with_user_agent("provider-a", Some("cursor"))));
+
+        // Denied user agent
+        assert!(!auth.is_allowed(&metadata_with_user_agent("provider-a", Some("unknown"))));
+
+        // Missing user agent does not match non-empty list
+        assert!(!auth.is_allowed(&metadata_with_user_agent("provider-a", None)));
+
+        // Wildcard matches any user agent
+        assert!(auth.is_allowed(&metadata_with_user_agent("provider-b", Some("anything"))));
+        assert!(auth.is_allowed(&metadata_with_user_agent("provider-b", None)));
+    }
+
+    #[test]
+    fn test_is_allowed_empty_user_agent_list_allows_any() {
+        let auth = Authorization {
+            rules: vec![rule_with_user_agents(&["provider-a"], &[], &[])],
+        };
+        assert!(auth.is_allowed(&metadata_with_user_agent("provider-a", Some("claude-code"))));
+        assert!(auth.is_allowed(&metadata_with_user_agent("provider-a", None)));
     }
 }
