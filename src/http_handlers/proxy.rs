@@ -3,7 +3,7 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use std::sync::Arc;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 use crate::api_type::{ApiType, ApiTypeHandler, api_type_for_path};
 
@@ -22,6 +22,19 @@ async fn forward_to_provider(
     api_type: Option<&ApiType>,
     request: axum::extract::Request,
 ) -> Response {
+    try_forward_to_provider(provider, api_type, request)
+        .await
+        .unwrap_or_else(|e| {
+            error!("forward_to_provider failed: {e:#}");
+            (StatusCode::BAD_GATEWAY, "internal server error").into_response()
+        })
+}
+
+async fn try_forward_to_provider(
+    provider: &provider::Provider,
+    api_type: Option<&ApiType>,
+    request: axum::extract::Request,
+) -> anyhow::Result<Response> {
     if let Some(caps) = capabilities::get_capabilities(&request)
         && !caps.is_allowed(
             &provider.key,
@@ -52,27 +65,14 @@ async fn forward_to_provider(
 
     let (request_inspector, request) = RequestInspector::new(api_type_handler.as_deref(), request);
 
-    let upstream_req = match provider.build_request(request) {
-        Ok(r) => r,
-        Err(e) => {
-            return (
-                StatusCode::BAD_GATEWAY,
-                format!("failed to build request: {e}"),
-            )
-                .into_response();
-        }
-    };
+    let upstream_req = provider
+        .build_request(request)
+        .map_err(|e| anyhow::anyhow!("failed to build request: {e}"))?;
 
-    let upstream_res = match provider.send(upstream_req).await {
-        Ok(r) => r,
-        Err(e) => {
-            return (
-                StatusCode::BAD_GATEWAY,
-                format!("upstream request failed: {e}"),
-            )
-                .into_response();
-        }
-    };
+    let upstream_res = provider
+        .send(upstream_req)
+        .await
+        .map_err(|e| anyhow::anyhow!("upstream request failed: {e}"))?;
 
     request_metadata.inspected = request_inspector.take();
 
@@ -84,10 +84,12 @@ async fn forward_to_provider(
     info!(%method, %path, %status, ?model, "upstream_resp");
     metrics::record_request(&request_metadata);
 
-    wrap_upstream_response(api_type_handler, upstream_res, move |result| match result {
-        Ok(metadata) => metrics::record_response(&request_metadata, metadata),
-        Err(e) => warn!("Failed to inspect response: {e}"),
-    })
+    let upstream_res =
+        wrap_upstream_response(api_type_handler, upstream_res, move |result| match result {
+            Ok(metadata) => metrics::record_response(&request_metadata, metadata),
+            Err(e) => warn!("Failed to inspect response: {e}"),
+        });
+    Ok(upstream_res)
 }
 
 pub async fn provider_proxy_handler(
@@ -147,16 +149,19 @@ fn wrap_upstream_response(
     builder.body(body).unwrap().into_response()
 }
 
-fn capabilities_forbidden_response(error: &str, capabilities: &Capabilities) -> Response {
+fn capabilities_forbidden_response(
+    error: &str,
+    capabilities: &Capabilities,
+) -> anyhow::Result<Response> {
     let body = serde_json::json!({
         "error": error,
         "capabilities": capabilities.capabilities,
     });
-    Response::builder()
+    let resp = Response::builder()
         .status(StatusCode::FORBIDDEN)
         .header("content-type", "application/json")
-        .body(Body::from(body.to_string()))
-        .unwrap()
+        .body(Body::from(body.to_string()))?;
+    Ok(resp)
 }
 
 #[cfg(test)]
