@@ -66,6 +66,10 @@ async fn try_forward_to_provider(
         inspected: request_inspection_metadata,
     };
 
+    if !provider.authorizer.is_allowed(&request_metadata) {
+        return forbidden_response("request not allowed by provider");
+    }
+
     if let Some(caps) = capabilities::get_capabilities(&request)
         && !Authorization::from(caps.clone()).is_allowed(&request_metadata)
     {
@@ -153,6 +157,17 @@ fn wrap_upstream_response(
     builder.body(body).unwrap().into_response()
 }
 
+fn forbidden_response(error: &str) -> anyhow::Result<Response> {
+    let body = serde_json::json!({
+        "error": error,
+    });
+    let resp = Response::builder()
+        .status(StatusCode::FORBIDDEN)
+        .header("content-type", "application/json")
+        .body(Body::from(body.to_string()))?;
+    Ok(resp)
+}
+
 fn capabilities_forbidden_response(
     error: &str,
     capabilities: &Capabilities,
@@ -176,7 +191,7 @@ mod tests {
 
     use crate::provider::ProviderManager;
     use crate::provider::compatibility::Compatibility;
-    use crate::test_utils::{make_provider, spawn_echo_server};
+    use crate::test_utils::{make_provider, make_provider_with_models, spawn_echo_server};
 
     #[tokio::test]
     async fn unmatched_path_returns_404() {
@@ -366,5 +381,67 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn proxy_provider_restriction() {
+        // Use Bedrock-style paths where the model is extracted from the URL.
+        let addr = spawn_echo_server().await;
+
+        let mut compat = Compatibility::default();
+        compat.bedrock_model_invoke = true;
+
+        let mut manager = ProviderManager::new();
+        manager.add(make_provider_with_models(
+            "provider-a",
+            &format!("http://{addr}"),
+            compat.clone(),
+            vec![glob::Pattern::new("*").unwrap()],
+        ));
+
+        manager.add(make_provider_with_models(
+            "provider-b",
+            &format!("http://{addr}"),
+            compat,
+            vec![glob::Pattern::new("gpt-4o").unwrap()],
+        ));
+
+        let app = crate::app::AppBuilder::new().manager(manager).build();
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/provider-a/model/allowed-model/invoke")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/provider-b/model/disallowed-model/invoke")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            body,
+            serde_json::json!({
+                "error": "request not allowed by provider",
+            })
+        );
     }
 }
