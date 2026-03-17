@@ -1,38 +1,22 @@
+// Layers — must be first to establish cascade order
+import "@/styles/layers.css";
+
+// Composables
 import { createApp } from "vue";
-import { createVuetify } from "vuetify";
-import { VueQueryPlugin } from "@tanstack/vue-query";
-import "@mdi/font/css/materialdesignicons.css";
+
+// Plugins
+import { registerPlugins } from "@/plugins";
+
+// Components
 import App from "@/App.vue";
-import router from "@/router";
-import "@/theme.css";
 
-const vuetify = createVuetify({
-  theme: {
-    defaultTheme: "light",
-    themes: {
-      light: {
-        colors: {
-          primary: "#2563eb",
-          background: "#f1f5f9",
-          surface: "#ffffff",
-        },
-        variables: {
-          "theme-overlay-multiplier": 1,
-        },
-      },
-      dark: {
-        dark: true,
-        colors: {
-          primary: "#2563eb",
-          background: "#121212",
-          surface: "#1e1e1e",
-        },
-        variables: {
-          "theme-overlay-multiplier": 1,
-        },
-      },
-    },
-  },
-});
+// Styles
+import "unfonts.css";
+import "@/styles/tailwind.css";
+import "@/styles/main.scss";
 
-createApp(App).use(router).use(VueQueryPlugin).use(vuetify).mount("#app");
+const app = createApp(App);
+
+registerPlugins(app);
+
+app.mount("#app");

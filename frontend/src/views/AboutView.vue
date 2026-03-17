@@ -12,7 +12,12 @@ const { data, isLoading, error } = useInfo();
       <div v-else>
         <p>
           Project Page:
-          <a href="https://github.com/Flared/lacuna" target="_blank" rel="noopener noreferrer">
+          <a
+            href="https://github.com/Flared/lacuna"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="text-blue-500 underline"
+          >
             Flared/lacuna
           </a>
           <v-icon icon="mdi-github" size="small" />

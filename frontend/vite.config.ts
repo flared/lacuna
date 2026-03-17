@@ -2,6 +2,7 @@ import { fileURLToPath, URL } from "node:url";
 import { defineConfig } from "vite";
 import tailwindcss from "@tailwindcss/vite";
 import vue from "@vitejs/plugin-vue";
+import fonts from 'unplugin-fonts/vite'
 import vuetify from "vite-plugin-vuetify";
 
 export default defineConfig({
@@ -9,7 +10,26 @@ export default defineConfig({
   plugins: [
     tailwindcss(),
     vue(),
-    vuetify(),
+    vuetify({
+      styles: {
+        configFile: 'src/styles/settings.scss',
+      }
+    }),
+    fonts({
+      fontsource: {
+        families: [
+          {
+            name: 'Roboto Mono',
+            weights: [400, 700],
+          },
+          {
+            name: 'Roboto',
+            weights: [100, 300, 400, 500, 700, 900],
+            styles: ['normal', 'italic'],
+          },
+        ],
+      },
+    }),
   ],
   resolve: {
     alias: {
