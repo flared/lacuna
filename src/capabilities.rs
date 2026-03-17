@@ -6,11 +6,23 @@ use serde_with::serde_as;
 #[derive(PartialEq, Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Capabilities {
+    pub capabilities: Vec<Capability>,
+}
+
+#[derive(PartialEq, Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Capability {
     #[serde(
         serialize_with = "serialize_patterns",
         deserialize_with = "deserialize_patterns"
     )]
     pub providers: Vec<glob::Pattern>,
+
+    #[serde(
+        serialize_with = "serialize_patterns",
+        deserialize_with = "deserialize_patterns"
+    )]
+    pub models: Vec<glob::Pattern>,
 }
 
 fn serialize_patterns<S: serde::Serializer>(
@@ -31,19 +43,38 @@ fn deserialize_patterns<'de, D: serde::Deserializer<'de>>(
         .collect()
 }
 
+#[derive(Debug)]
+pub enum MatchedModel<'a> {
+    Unknown,
+    Some(&'a str),
+    None,
+}
+
 impl Capabilities {
-    pub fn is_provider_allowed(&self, provider: &str) -> bool {
-        self.providers.iter().any(|p| p.matches(provider))
+    pub fn from_capabilities(capabilities: Vec<Capability>) -> Self {
+        Self { capabilities }
+    }
+
+    pub fn is_allowed(&self, provider: &str, model: &MatchedModel) -> bool {
+        self.capabilities.iter().any(|c| {
+            let provider_matches =
+                c.providers.is_empty() || c.providers.iter().any(|p| p.matches(provider));
+            let model_matches = c.models.is_empty()
+                || match model {
+                    MatchedModel::Unknown => {
+                        // We failed to identity the model.
+                        // The best we can do is check if any model is allowed.
+                        c.models.iter().any(|p| p.matches(""))
+                    }
+                    MatchedModel::Some(m) => c.models.iter().any(|p| p.matches(m)),
+                    MatchedModel::None => true,
+                };
+            provider_matches && model_matches
+        })
     }
 
     pub fn deny_all() -> Self {
         Self::default()
-    }
-
-    pub fn from_capabilities(capabilities: Vec<Capabilities>) -> Self {
-        Self {
-            providers: capabilities.into_iter().flat_map(|c| c.providers).collect(),
-        }
     }
 }
 
@@ -56,7 +87,7 @@ impl Capabilities {
 struct TailscaleCapabilities {
     #[serde_as(as = "Vec<DefaultOnError<Option<_>>>")]
     #[serde(default, rename = "flare.io/cap/lacuna")]
-    app_capabilities: Vec<Option<Capabilities>>,
+    app_capabilities: Vec<Option<Capability>>,
 }
 
 pub fn parse_capabilities(header_value: &str) -> Result<Capabilities, anyhow::Error> {
@@ -92,31 +123,127 @@ mod tests {
     }
 
     #[test]
-    fn test_is_provider_allowed() {
-        let cap = Capabilities {
+    fn test_is_allowed() {
+        let capabilities = Capabilities::from_capabilities(vec![Capability {
             providers: vec![pattern("providerone"), pattern("providerprefix-*")],
-        };
-        assert!(cap.is_provider_allowed("providerone"));
-        assert!(cap.is_provider_allowed("providerprefix-suffix"));
-        assert!(!cap.is_provider_allowed("providertwo"));
+            models: vec![pattern("claude-*"), pattern("gpt-4o")],
+        }]);
+
+        // Provider with MatchedModel::None (only checks provider)
+        assert!(capabilities.is_allowed("providerone", &MatchedModel::None));
+        assert!(capabilities.is_allowed("providerprefix-suffix", &MatchedModel::None));
+        assert!(!capabilities.is_allowed("providertwo", &MatchedModel::None));
+
+        // Provider with MatchedModel::Some (checks both provider and model)
+        assert!(capabilities.is_allowed(
+            "providerone",
+            &MatchedModel::Some("claude-sonnet-4-20250514")
+        ));
+        assert!(capabilities.is_allowed("providerone", &MatchedModel::Some("gpt-4o")));
+        assert!(!capabilities.is_allowed("providerone", &MatchedModel::Some("gpt-3.5-turbo")));
+
+        // Wrong provider
+        assert!(!capabilities.is_allowed("other", &MatchedModel::Some("claude-sonnet-4-20250514")));
     }
 
     #[test]
-    fn test_capabilities_deserialize() {
-        let json = r#"{"providers": ["myprovider", "prefix-*"]}"#;
-        let caps: Capabilities = serde_json::from_str(json).unwrap();
+    fn test_is_allowed_unknown_model() {
+        // Unknown model is authorized if the capability allows any model (wildcard).
+        let with_wildcard = Capabilities::from_capabilities(vec![Capability {
+            providers: vec![pattern("p")],
+            models: vec![pattern("**")],
+        }]);
+        assert!(with_wildcard.is_allowed("p", &MatchedModel::Unknown));
+
+        // Unknown model is authorized if the capability allows any model (empty list)
+        let empty_models = Capabilities::from_capabilities(vec![Capability {
+            providers: vec![pattern("p")],
+            models: vec![],
+        }]);
+        assert!(empty_models.is_allowed("p", &MatchedModel::Unknown));
+
+        // Unknown model is blocked if the capability requires a specific model.
+        let without_wildcard = Capabilities::from_capabilities(vec![Capability {
+            providers: vec![pattern("p")],
+            models: vec![pattern("claude-*")],
+        }]);
+        assert!(!without_wildcard.is_allowed("p", &MatchedModel::Unknown));
+    }
+
+    #[test]
+    fn test_is_allowed_empty_list_allows_any() {
+        // Empty models list means "all models allowed"
+        let empty_models = Capabilities::from_capabilities(vec![Capability {
+            providers: vec![pattern("p")],
+            models: vec![],
+        }]);
+        assert!(empty_models.is_allowed("p", &MatchedModel::Some("anything")));
+
+        // Empty providers list means "all providers allowed"
+        let empty_providers = Capabilities::from_capabilities(vec![Capability {
+            providers: vec![],
+            models: vec![pattern("claude-*")],
+        }]);
+        assert!(empty_providers.is_allowed(
+            "anyprovider",
+            &MatchedModel::Some("claude-sonnet-4-20250514")
+        ));
+    }
+
+    #[test]
+    fn test_is_allowed_multiple_capabilities() {
+        let capabilities = Capabilities::from_capabilities(vec![
+            Capability {
+                providers: vec![pattern("provider-a")],
+                models: vec![pattern("claude-*")],
+            },
+            Capability {
+                providers: vec![pattern("provider-b")],
+                models: vec![pattern("gpt-*")],
+            },
+        ]);
+        assert!(capabilities.is_allowed(
+            "provider-a",
+            &MatchedModel::Some("claude-sonnet-4-20250514")
+        ));
+        assert!(!capabilities.is_allowed("provider-a", &MatchedModel::Some("gpt-4o")));
+        assert!(capabilities.is_allowed("provider-b", &MatchedModel::Some("gpt-4o")));
+        assert!(!capabilities.is_allowed(
+            "provider-b",
+            &MatchedModel::Some("claude-sonnet-4-20250514")
+        ));
+    }
+
+    #[test]
+    fn test_capability_deserialize() {
+        let json = r#"{"providers": ["myprovider", "prefix-*"], "models": ["claude-*"]}"#;
+        let capability: Capability = serde_json::from_str(json).unwrap();
         assert_eq!(
-            caps,
-            Capabilities {
+            capability,
+            Capability {
                 providers: vec![pattern("myprovider"), pattern("prefix-*")],
+                models: vec![pattern("claude-*")],
             },
         );
     }
 
     #[test]
-    fn test_capabilities_deserialize_invalid_pattern() {
+    fn test_capability_deserialize_no_models() {
+        let json = r#"{"providers": ["myprovider"]}"#;
+        let capability: Capability = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            capability,
+            Capability {
+                providers: vec![pattern("myprovider")],
+                models: vec![],
+            },
+        );
+    }
+
+    #[test]
+    fn test_capability_deserialize_invalid_pattern() {
         let json = r#"{"providers": ["valid", "[invalid"]}"#;
-        let result: Result<Capabilities, _> = serde_json::from_str(json);
+        let result: Result<Capability, _> = serde_json::from_str(json);
         assert!(
             result
                 .unwrap_err()
@@ -126,14 +253,18 @@ mod tests {
     }
 
     #[test]
-    fn test_capabilities_serialize() {
-        let caps = Capabilities {
+    fn test_capability_serialize() {
+        let capability = Capability {
             providers: vec![pattern("myprovider"), pattern("prefix-*")],
+            models: vec![pattern("claude-*")],
         };
-        let json = serde_json::to_value(&caps).unwrap();
+        let json = serde_json::to_value(&capability).unwrap();
         assert_eq!(
             json,
-            serde_json::json!({"providers": ["myprovider", "prefix-*"]}),
+            serde_json::json!({
+                "providers": ["myprovider", "prefix-*"],
+                "models": ["claude-*"],
+            }),
         );
     }
 
@@ -141,20 +272,23 @@ mod tests {
     fn parse_valid_capabilities() {
         let json = r#"{
             "flare.io/cap/lacuna": [
-                {"providers": ["firstprovider"]},
-                {"providers": ["secondprofider", "thirdprovider"]}
+                {"providers": ["firstprovider"], "models": ["claude-*"]},
+                {"providers": ["secondprofider", "thirdprovider"], "models": ["gpt-*"]}
             ]
         }"#;
-        let caps = parse_capabilities(json).unwrap();
+        let capabilities = parse_capabilities(json).unwrap();
         assert_eq!(
-            caps,
-            Capabilities {
-                providers: vec![
-                    pattern("firstprovider"),
-                    pattern("secondprofider"),
-                    pattern("thirdprovider")
-                ],
-            },
+            capabilities,
+            Capabilities::from_capabilities(vec![
+                Capability {
+                    providers: vec![pattern("firstprovider")],
+                    models: vec![pattern("claude-*")],
+                },
+                Capability {
+                    providers: vec![pattern("secondprofider"), pattern("thirdprovider")],
+                    models: vec![pattern("gpt-*")],
+                },
+            ]),
         );
     }
 
@@ -162,25 +296,32 @@ mod tests {
     fn parse_capabilities_invalid_ignored() {
         let json = r#"{
             "flare.io/cap/lacuna": [
-                {"providers": ["firstprovider"]},
+                {"providers": ["firstprovider"], "models": ["claude-*"]},
                 ["something-bad"],
                 {"providers": ["secondprofider"]}
             ]
         }"#;
-        let caps = parse_capabilities(json).unwrap();
+        let capabilities = parse_capabilities(json).unwrap();
         assert_eq!(
-            caps,
-            Capabilities {
-                providers: vec![pattern("firstprovider"), pattern("secondprofider")],
-            },
+            capabilities,
+            Capabilities::from_capabilities(vec![
+                Capability {
+                    providers: vec![pattern("firstprovider")],
+                    models: vec![pattern("claude-*")],
+                },
+                Capability {
+                    providers: vec![pattern("secondprofider")],
+                    models: vec![],
+                },
+            ]),
         );
     }
 
     #[test]
     fn parse_missing_key_returns_none() {
         let json = r#"{"other.key": []}"#;
-        let caps = parse_capabilities(json).unwrap();
-        assert_eq!(caps, Capabilities::default());
+        let capabilities = parse_capabilities(json).unwrap();
+        assert_eq!(capabilities, Capabilities::default());
     }
 
     #[test]
@@ -195,12 +336,13 @@ mod tests {
         // Q-encoded: {"flare.io/cap/lacuna":[{"providers":["🐿️"]}]}
         let encoded =
             r#"=?utf-8?q?{"flare.io/cap/lacuna":[{"providers":["=F0=9F=90=BF=EF=B8=8F"]}]}?="#;
-        let caps = parse_capabilities(encoded).unwrap();
+        let capabilities = parse_capabilities(encoded).unwrap();
         assert_eq!(
-            caps,
-            Capabilities {
+            capabilities,
+            Capabilities::from_capabilities(vec![Capability {
                 providers: vec![pattern("🐿️")],
-            },
+                models: vec![],
+            },]),
         );
     }
 }
