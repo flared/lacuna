@@ -2,7 +2,7 @@
 import { computed } from "vue";
 import { useRoute } from "vue-router";
 import { useConfig } from "@/composables/config";
-import { RouteMeta, RouteConfig, getRoutes } from "@/router";
+import { RouteMeta, RouteConfig, getRoutes } from "@/plugins/router";
 
 const route = useRoute();
 const { data } = useConfig();
