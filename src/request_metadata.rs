@@ -22,7 +22,7 @@ pub struct RequestMetadata {
 }
 
 impl RequestMetadata {
-    pub fn labels(&self) -> [(&'static str, String); 4] {
+    pub fn labels(&self) -> [(&'static str, String); 5] {
         let user = match &self.user_identity {
             Some(Identity::LoginUser(email)) => email.clone(),
             _ => String::new(),
@@ -32,12 +32,18 @@ impl RequestMetadata {
             .as_ref()
             .and_then(|m| m.model.clone())
             .unwrap_or_default();
+        let user_agent = self
+            .user_agent
+            .as_ref()
+            .map(|ua| ua.normalized.clone())
+            .unwrap_or_default();
 
         [
             ("provider", self.provider_key.clone()),
             ("handler", self.api_handler_id.clone()),
             ("user", user),
             ("model", model),
+            ("user_agent", user_agent),
         ]
     }
 }

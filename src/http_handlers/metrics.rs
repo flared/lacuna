@@ -73,7 +73,7 @@ mod tests {
         let body = get_metrics_body(app).await;
         assert!(
             body.contains(
-                r#"lacuna_provider_requests_total{provider="test-anon",handler="openai_chat_completion",user="",model=""} 1"#
+                r#"lacuna_provider_requests_total{provider="test-anon",handler="openai_chat_completion",user="",model="",user_agent=""} 1"#
             ),
             "expected anonymous request metric line, got:\n{body}"
         );
@@ -120,19 +120,19 @@ mod tests {
         let body = get_metrics_body(app).await;
         assert!(
             body.contains(
-                r#"lacuna_provider_tokens_input_total{provider="myprovider",handler="openai_chat_completion",user="",model=""} 10"#
+                r#"lacuna_provider_tokens_input_total{provider="myprovider",handler="openai_chat_completion",user="",model="",user_agent=""} 10"#
             ),
             "expected input tokens metric line, got:\n{body}"
         );
         assert!(
             body.contains(
-                r#"lacuna_provider_tokens_output_total{provider="myprovider",handler="openai_chat_completion",user="",model=""} 20"#
+                r#"lacuna_provider_tokens_output_total{provider="myprovider",handler="openai_chat_completion",user="",model="",user_agent=""} 20"#
             ),
             "expected output tokens metric line, got:\n{body}"
         );
         assert!(
             body.contains(
-                r#"lacuna_provider_tokens_total{provider="myprovider",handler="openai_chat_completion",user="",model=""} 30"#
+                r#"lacuna_provider_tokens_total{provider="myprovider",handler="openai_chat_completion",user="",model="",user_agent=""} 30"#
             ),
             "expected total tokens metric line, got:\n{body}"
         );
@@ -175,7 +175,7 @@ mod tests {
         let body = get_metrics_body(app).await;
         assert!(
             body.contains(
-                r#"lacuna_provider_requests_total{provider="test-identified",handler="openai_chat_completion",user="alice@example.com",model=""} 1"#
+                r#"lacuna_provider_requests_total{provider="test-identified",handler="openai_chat_completion",user="alice@example.com",model="",user_agent=""} 1"#
             ),
             "expected identified request metric line, got:\n{body}"
         );
