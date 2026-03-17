@@ -8,8 +8,8 @@
       "dst": ["tag:lacuna"],
       "app": {
         "flare.io/cap/lacuna": [
-          { "providers": ["myprovider"] },
-          { "providers": ["prefix-*"] }
+          { "providers": ["firstprovider", "secondprovider"] },
+          { "providers": ["thirdprovider-*"], "models": ["model-1"] 
         ]
       }
     }
