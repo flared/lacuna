@@ -8,7 +8,7 @@ use tracing::{debug, error, info, warn};
 use crate::api_type::{ApiType, ApiTypeHandler, api_type_for_path};
 
 use crate::capabilities::{Capabilities, MatchedModel};
-use crate::http_middleware::{auth, capabilities};
+use crate::http_middleware::{auth, capabilities, user_agent};
 use crate::inspector::CallbackInspector;
 use crate::inspector::DecodingInspector;
 use crate::inspector::RequestInspector;
@@ -47,6 +47,7 @@ async fn try_forward_to_provider(
     let method = request.method().to_owned();
     let path = request.uri().path().to_owned();
     let user = auth::get_caller_identity(&request);
+    let user_agent = user_agent::get_user_agent(&request);
     let api_type_handler = api_type.map(|t| t.handler());
     let api_type_handler_id = api_type_handler
         .as_ref()
@@ -58,6 +59,7 @@ async fn try_forward_to_provider(
         provider_key: provider.key.clone(),
         api_handler_id: api_type_handler_id,
         user_identity: user,
+        user_agent,
         inspected: None,
     };
 

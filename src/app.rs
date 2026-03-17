@@ -5,8 +5,10 @@ use std::sync::Arc;
 use crate::http_handlers;
 use crate::http_middleware::auth;
 use crate::http_middleware::capabilities;
+use crate::http_middleware::user_agent;
 use crate::provider::ProviderManager;
 use crate::trace;
+use crate::user_agent::{UserAgentExtractor, UserAgentPatternConfig};
 
 #[derive(Debug, Default)]
 pub struct AppBuilder {
@@ -14,6 +16,7 @@ pub struct AppBuilder {
     assets_path: Option<PathBuf>,
     identity_header: Option<String>,
     capabilities_header: Option<String>,
+    user_agents: Vec<UserAgentPatternConfig>,
 }
 
 impl AppBuilder {
@@ -23,6 +26,7 @@ impl AppBuilder {
             assets_path: None,
             identity_header: None,
             capabilities_header: None,
+            user_agents: Vec::new(),
         }
     }
 
@@ -43,6 +47,11 @@ impl AppBuilder {
 
     pub fn capabilities_header(mut self, header: Option<String>) -> Self {
         self.capabilities_header = header;
+        self
+    }
+
+    pub fn user_agents(mut self, configs: Vec<UserAgentPatternConfig>) -> Self {
+        self.user_agents = configs;
         self
     }
 
@@ -72,16 +81,24 @@ impl AppBuilder {
             .with_state(manager)
             .layer(trace::layer());
 
+        let extractor = Arc::new(UserAgentExtractor::new(self.user_agents));
+        router = router.layer(axum::middleware::from_fn_with_state(
+            extractor,
+            user_agent::user_agent_middleware,
+        ));
+
         if let Some(header_name) = self.identity_header {
-            router = router.layer(axum::middleware::from_fn(move |request, next| {
-                auth::identity_middleware(header_name.clone(), request, next)
-            }));
+            router = router.layer(axum::middleware::from_fn_with_state(
+                header_name,
+                auth::identity_middleware,
+            ));
         }
 
         if let Some(header_name) = self.capabilities_header {
-            router = router.layer(axum::middleware::from_fn(move |request, next| {
-                capabilities::capabilities_middleware(header_name.clone(), request, next)
-            }));
+            router = router.layer(axum::middleware::from_fn_with_state(
+                header_name,
+                capabilities::capabilities_middleware,
+            ));
         }
 
         router

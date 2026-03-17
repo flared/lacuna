@@ -56,6 +56,7 @@ async fn main() {
         .assets_path(&args.assets)
         .identity_header(config.lacuna.identity_header)
         .capabilities_header(config.lacuna.capabilities_header)
+        .user_agents(config.lacuna.user_agents)
         .build();
 
     let listener = TcpListener::bind(format!("{}:{}", args.host, args.port))

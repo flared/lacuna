@@ -23,6 +23,9 @@ pub struct Lacuna {
 
     #[serde(default)]
     pub capabilities_header: Option<String>,
+
+    #[serde(default)]
+    pub user_agents: Vec<crate::user_agent::UserAgentPatternConfig>,
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]

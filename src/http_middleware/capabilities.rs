@@ -1,4 +1,4 @@
-use axum::{extract::Request, http, middleware::Next, response::Response};
+use axum::{extract::Request, extract::State, http, middleware::Next, response::Response};
 use tracing::warn;
 
 use crate::capabilities::{Capabilities, parse_capabilities};
@@ -21,7 +21,7 @@ fn capabilities_from_request(header_name: &str, request: &Request) -> Capabiliti
 }
 
 pub async fn capabilities_middleware(
-    header_name: String,
+    State(header_name): State<String>,
     mut request: Request,
     next: Next,
 ) -> Response {
