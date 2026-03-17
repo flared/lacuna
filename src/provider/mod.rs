@@ -76,16 +76,16 @@ impl Provider {
         let authorizer = Authorization {
             rules: vec![Rule {
                 providers: vec![],
-                models: config.models.clone(),
-                user_agents: config.user_agents.clone(),
+                models: config.capability.models.clone(),
+                user_agents: config.capability.user_agents.clone(),
             }],
         };
         Ok(Self {
             key: key.to_owned(),
             name: config.name.clone(),
             baseurl,
-            models: config.models.clone(),
-            user_agents: config.user_agents.clone(),
+            models: config.capability.models.clone(),
+            user_agents: config.capability.user_agents.clone(),
             authorizer,
             client: reqwest::Client::new(),
             headers: config.headers.clone(),
@@ -157,8 +157,10 @@ mod tests {
                 name: String::new(),
                 description: String::new(),
                 baseurl: baseurl.to_owned(),
-                models: vec![glob::Pattern::new("model-1").unwrap()],
-                user_agents: vec![],
+                capability: config::Capability {
+                    models: vec![glob::Pattern::new("model-1").unwrap()],
+                    user_agents: vec![],
+                },
                 apikey: apikey.to_owned(),
                 authorization,
                 tailnet: false,
