@@ -1,10 +1,13 @@
 pub mod callback;
+mod content_decoder;
+pub mod decoding_inspector;
 pub mod protocol;
 pub mod request_inspector;
 pub mod static_inspector;
 pub mod stream;
 
 pub use callback::CallbackInspector;
+pub use decoding_inspector::DecodingInspector;
 pub use request_inspector::RequestInspector;
 pub use static_inspector::StaticInspector;
 

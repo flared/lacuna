@@ -33,6 +33,7 @@ rfc2047-decoder = ">=1.1.0"
 serde_with = ">=3.18.0"
 aws-smithy-eventstream = ">=0.60.19"
 aws-smithy-types = ">=1.4.5"
+flate2 = ">=1"
 
 [dev-dependencies]
 tower = { version = ">=0.5", features = ["util"] }
