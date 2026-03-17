@@ -7,7 +7,8 @@ use tracing::{debug, error, info, warn};
 
 use crate::api_type::{ApiType, ApiTypeHandler, api_type_for_path};
 
-use crate::capabilities::{Capabilities, MatchedModel};
+use crate::authorization::Authorization;
+use crate::capabilities::Capabilities;
 use crate::http_middleware::{auth, capabilities, user_agent};
 use crate::inspector::CallbackInspector;
 use crate::inspector::DecodingInspector;
@@ -57,18 +58,6 @@ async fn try_forward_to_provider(
         None => Default::default(),
     };
 
-    let matched_model = match request_inspection_metadata.model.as_deref() {
-        Some(model) => MatchedModel::Some(model),
-        None if api_type_handler.is_some() => MatchedModel::Unknown,
-        None => MatchedModel::None,
-    };
-
-    if let Some(caps) = capabilities::get_capabilities(&request)
-        && !caps.is_allowed(&provider.key, &matched_model)
-    {
-        return capabilities_forbidden_response("request not allowed by capabilities", &caps);
-    }
-
     let request_metadata = RequestMetadata {
         provider_key: provider.key.clone(),
         api_handler_id: api_type_handler_id,
@@ -76,6 +65,12 @@ async fn try_forward_to_provider(
         user_agent,
         inspected: request_inspection_metadata,
     };
+
+    if let Some(caps) = capabilities::get_capabilities(&request)
+        && !Authorization::from(caps.clone()).is_allowed(&request_metadata)
+    {
+        return capabilities_forbidden_response("request not allowed by capabilities", &caps);
+    }
 
     debug!(%method, %path, "downstream_req");
 

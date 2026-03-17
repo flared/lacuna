@@ -1,5 +1,6 @@
 pub mod api_type;
 pub mod app;
+pub mod authorization;
 pub mod capabilities;
 pub mod config;
 pub mod http_handlers;
