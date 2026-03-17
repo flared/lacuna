@@ -1,3 +1,5 @@
+use async_trait::async_trait;
+use axum::body::Body;
 use serde::Deserialize;
 
 use crate::inspector::protocol::ProtocolInspector;
@@ -5,10 +7,7 @@ use crate::inspector::protocol::sse::{SseEvent, SseProtocol};
 use crate::inspector::protocol::text::{TextBody, TextProtocol};
 use crate::request_metadata::RequestInspectionMetadata;
 
-use super::{
-    ApiTypeHandler, Inspector, RequestMetadataInspector, ResponseMetadata,
-    ResponseMetadataInspector,
-};
+use super::{ApiTypeHandler, Inspector, ResponseMetadata, ResponseMetadataInspector};
 
 #[derive(Debug, Deserialize)]
 struct Usage {
@@ -35,18 +34,39 @@ struct AnthropicRequestBody {
 
 pub struct AnthropicMessagesHandler;
 
+#[async_trait]
 impl ApiTypeHandler for AnthropicMessagesHandler {
     fn id(&self) -> &'static str {
         "anthropic_messages"
     }
 
-    fn request_inspector(&self, _parts: &http::request::Parts) -> RequestMetadataInspector {
-        Box::new(ProtocolInspector::new(
-            TextProtocol::new(),
-            AnthropicRequestInspector {
-                metadata: RequestInspectionMetadata::default(),
-            },
-        ))
+    async fn inspect_request(
+        &self,
+        request: axum::extract::Request,
+    ) -> (
+        anyhow::Result<RequestInspectionMetadata>,
+        axum::extract::Request,
+    ) {
+        let (parts, body) = request.into_parts();
+        let bytes = match axum::body::to_bytes(body, usize::MAX).await {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                let request = axum::http::Request::from_parts(parts, Body::empty());
+                return (
+                    Err(anyhow::anyhow!("failed to read request body: {e}")),
+                    request,
+                );
+            }
+        };
+        let metadata = match serde_json::from_slice::<AnthropicRequestBody>(&bytes) {
+            Ok(body) => RequestInspectionMetadata { model: body.model },
+            Err(e) => {
+                tracing::error!("Failed to parse Anthropic request body: {e}");
+                RequestInspectionMetadata::default()
+            }
+        };
+        let request = axum::http::Request::from_parts(parts, Body::from(bytes));
+        (Ok(metadata), request)
     }
 
     fn response_inspector(
@@ -151,25 +171,6 @@ impl Inspector<TextBody> for AnthropicJsonInspector {
     }
 }
 
-struct AnthropicRequestInspector {
-    metadata: RequestInspectionMetadata,
-}
-
-impl Inspector<TextBody> for AnthropicRequestInspector {
-    type Output = RequestInspectionMetadata;
-
-    fn feed(&mut self, body: TextBody) {
-        match serde_json::from_slice::<AnthropicRequestBody>(&body.data) {
-            Ok(b) => self.metadata.model = b.model,
-            Err(e) => tracing::error!("Failed to parse Anthropic request body: {e}"),
-        }
-    }
-
-    fn finish(self: Box<Self>) -> Result<RequestInspectionMetadata, anyhow::Error> {
-        Ok(self.metadata)
-    }
-}
-
 fn parse_anthropic_json(data: &[u8]) -> Result<ResponseMetadata, anyhow::Error> {
     let parsed = serde_json::from_slice::<AnthropicDataWithUsage>(data)?;
     Ok(ResponseMetadata {
@@ -182,13 +183,11 @@ fn parse_anthropic_json(data: &[u8]) -> Result<ResponseMetadata, anyhow::Error> 
 mod tests {
     use super::*;
 
-    fn make_request_inspector() -> RequestMetadataInspector {
-        let parts = http::Request::get("http://localhost/v1/messages")
-            .body(())
+    fn make_request(body: &'static [u8]) -> axum::extract::Request {
+        axum::http::Request::builder()
+            .uri("http://localhost/v1/messages")
+            .body(Body::from(body))
             .unwrap()
-            .into_parts()
-            .0;
-        AnthropicMessagesHandler.request_inspector(&parts)
     }
 
     fn make_json_inspector() -> ResponseMetadataInspector {
@@ -204,36 +203,35 @@ mod tests {
         AnthropicMessagesHandler.response_inspector(200, &headers)
     }
 
-    #[test]
-    fn inspect_request_model() {
-        let body = br#"{"model": "claude-sonnet-4-20250514", "max_tokens": 1024, "messages": [{"role": "user", "content": "Hi"}]}"#;
-        let mut inspector = make_request_inspector();
-        inspector.feed(body);
-        let metadata = inspector.finish().unwrap();
+    #[tokio::test]
+    async fn inspect_request_model() {
+        let request = make_request(br#"{"model": "claude-sonnet-4-20250514", "max_tokens": 1024, "messages": [{"role": "user", "content": "Hi"}]}"#);
+        let (result, _request) = AnthropicMessagesHandler.inspect_request(request).await;
+        let metadata = result.unwrap();
         assert_eq!(metadata.model, Some("claude-sonnet-4-20250514".to_owned()));
     }
 
-    #[test]
-    fn inspect_request_no_model() {
-        let body = br#"{"max_tokens": 1024, "messages": []}"#;
-        let mut inspector = make_request_inspector();
-        inspector.feed(body);
-        let metadata = inspector.finish().unwrap();
+    #[tokio::test]
+    async fn inspect_request_no_model() {
+        let request = make_request(br#"{"max_tokens": 1024, "messages": []}"#);
+        let (result, _request) = AnthropicMessagesHandler.inspect_request(request).await;
+        let metadata = result.unwrap();
         assert_eq!(metadata.model, None);
     }
 
-    #[test]
-    fn inspect_request_invalid_json() {
-        let mut inspector = make_request_inspector();
-        inspector.feed(b"not json");
-        let metadata = inspector.finish().unwrap();
+    #[tokio::test]
+    async fn inspect_request_invalid_json() {
+        let request = make_request(b"not json");
+        let (result, _request) = AnthropicMessagesHandler.inspect_request(request).await;
+        let metadata = result.unwrap();
         assert_eq!(metadata.model, None);
     }
 
-    #[test]
-    fn inspect_request_empty_body() {
-        let inspector = make_request_inspector();
-        let metadata = inspector.finish().unwrap();
+    #[tokio::test]
+    async fn inspect_request_empty_body() {
+        let request = make_request(b"");
+        let (result, _request) = AnthropicMessagesHandler.inspect_request(request).await;
+        let metadata = result.unwrap();
         assert_eq!(metadata.model, None);
     }
 

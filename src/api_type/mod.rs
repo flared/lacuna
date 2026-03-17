@@ -4,6 +4,7 @@ mod gemini;
 mod google;
 mod openai;
 
+use async_trait::async_trait;
 use regex::Regex;
 use std::sync::LazyLock;
 
@@ -11,7 +12,6 @@ pub use crate::inspector::{ByteInspector, Inspector, StaticInspector};
 pub use crate::request_metadata::{RequestInspectionMetadata, ResponseMetadata};
 
 pub type ResponseMetadataInspector = ByteInspector<ResponseMetadata>;
-pub type RequestMetadataInspector = ByteInspector<RequestInspectionMetadata>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ApiType {
@@ -24,6 +24,7 @@ pub enum ApiType {
     GoogleRawPredict,
 }
 
+#[async_trait]
 pub trait ApiTypeHandler {
     fn id(&self) -> &'static str;
 
@@ -38,15 +39,22 @@ pub trait ApiTypeHandler {
         Box::new(StaticInspector::default())
     }
 
-    /// Create an inspector for this request body.
-    /// Defaults to a no-op inspector that returns empty metadata.
-    fn request_inspector(&self, _parts: &http::request::Parts) -> RequestMetadataInspector {
-        Box::new(StaticInspector::default())
+    /// Inspect the request and extract metadata.
+    /// Reads the request body upfront if needed, then returns the metadata and a reconstructed request.
+    /// Defaults to a no-op that returns empty metadata and the request unchanged.
+    async fn inspect_request(
+        &self,
+        request: axum::extract::Request,
+    ) -> (
+        anyhow::Result<RequestInspectionMetadata>,
+        axum::extract::Request,
+    ) {
+        (Ok(RequestInspectionMetadata::default()), request)
     }
 }
 
 impl ApiType {
-    pub fn handler(&self) -> Box<dyn ApiTypeHandler + Send> {
+    pub fn handler(&self) -> Box<dyn ApiTypeHandler + Send + Sync> {
         match self {
             ApiType::OpenAiChatCompletion => Box::new(openai::OpenAiChatCompletionHandler),
             ApiType::OpenAiResponses => Box::new(openai::OpenAiResponsesHandler),

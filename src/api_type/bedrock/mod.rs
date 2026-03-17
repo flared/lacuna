@@ -5,10 +5,12 @@ use crate::inspector::protocol::ProtocolInspector;
 use crate::inspector::protocol::amazon_eventstream::AmazonEventstreamProtocol;
 
 use super::anthropic::AnthropicSseInspector;
-use super::{ApiTypeHandler, RequestMetadataInspector, ResponseMetadataInspector, StaticInspector};
+use super::{ApiTypeHandler, ResponseMetadataInspector};
 use crate::request_metadata::RequestInspectionMetadata;
 
 pub struct BedrockModelInvokeHandler;
+
+use async_trait::async_trait;
 
 fn is_amazon_event_stream(headers: &http::HeaderMap) -> bool {
     headers
@@ -28,14 +30,21 @@ fn extract_model_from_path(path: &str) -> Option<String> {
     Some(model.to_owned())
 }
 
+#[async_trait]
 impl ApiTypeHandler for BedrockModelInvokeHandler {
     fn id(&self) -> &'static str {
         "bedrock_model_invoke"
     }
 
-    fn request_inspector(&self, parts: &http::request::Parts) -> RequestMetadataInspector {
-        let model = extract_model_from_path(parts.uri.path());
-        Box::new(StaticInspector::new(RequestInspectionMetadata { model }))
+    async fn inspect_request(
+        &self,
+        request: axum::extract::Request,
+    ) -> (
+        anyhow::Result<RequestInspectionMetadata>,
+        axum::extract::Request,
+    ) {
+        let model = extract_model_from_path(request.uri().path());
+        (Ok(RequestInspectionMetadata { model }), request)
     }
 
     fn response_inspector(
