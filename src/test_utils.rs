@@ -44,6 +44,7 @@ pub fn make_provider(
             description: String::new(),
             baseurl: baseurl.to_owned(),
             models: vec![],
+            user_agents: vec![],
             apikey: String::new(),
             authorization: config::Authorization::None,
             tailnet: false,

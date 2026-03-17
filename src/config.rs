@@ -39,8 +39,15 @@ pub struct Provider {
 
     pub baseurl: String,
 
+    #[serde(
+        default,
+        serialize_with = "crate::serde_utils::serialize_patterns",
+        deserialize_with = "crate::serde_utils::deserialize_patterns"
+    )]
+    pub models: Vec<glob::Pattern>,
+
     #[serde(default)]
-    pub models: Vec<String>,
+    pub user_agents: Vec<String>,
 
     #[serde(default)]
     pub apikey: String,
@@ -109,6 +116,7 @@ mod tests {
               "name": "OpenAI",
               "baseurl": "https://api.openai.com/v1",
               "models": ["gpt-4o", "gpt-4o-mini"],
+              "user_agents": ["claude-code"],
               "apikey": "sk-test",
               "authorization": "bearer",
               "compatibility": {
@@ -144,7 +152,14 @@ mod tests {
         let openai = &config.providers["openai"];
         assert_eq!(openai.name, "OpenAI");
         assert_eq!(openai.baseurl, "https://api.openai.com/v1");
-        assert_eq!(openai.models, vec!["gpt-4o", "gpt-4o-mini"]);
+        assert_eq!(
+            openai.models,
+            vec![
+                glob::Pattern::new("gpt-4o").unwrap(),
+                glob::Pattern::new("gpt-4o-mini").unwrap()
+            ]
+        );
+        assert_eq!(openai.user_agents, vec!["claude-code"]);
         assert_eq!(openai.apikey, "sk-test");
         assert_eq!(openai.authorization, Authorization::Bearer);
         assert!(openai.compatibility.openai_chat);
@@ -240,6 +255,7 @@ mod tests {
               "baseurl": "https://api.openai.com/",
               "apikey": "YOUR_OPENAI_KEY",
               "models": ["gpt-5", "gpt-5-mini", "gpt-4.1"],
+              "user_agents": ["claude-code"],
               "name": "OpenAI",
               "description": "OpenAI models",
               "compatibility": {

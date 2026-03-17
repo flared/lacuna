@@ -13,34 +13,16 @@ pub struct Capabilities {
 #[serde(default, deny_unknown_fields)]
 pub struct Capability {
     #[serde(
-        serialize_with = "serialize_patterns",
-        deserialize_with = "deserialize_patterns"
+        serialize_with = "crate::serde_utils::serialize_patterns",
+        deserialize_with = "crate::serde_utils::deserialize_patterns"
     )]
     pub providers: Vec<glob::Pattern>,
 
     #[serde(
-        serialize_with = "serialize_patterns",
-        deserialize_with = "deserialize_patterns"
+        serialize_with = "crate::serde_utils::serialize_patterns",
+        deserialize_with = "crate::serde_utils::deserialize_patterns"
     )]
     pub models: Vec<glob::Pattern>,
-}
-
-fn serialize_patterns<S: serde::Serializer>(
-    patterns: &[glob::Pattern],
-    serializer: S,
-) -> Result<S::Ok, S::Error> {
-    let strings: Vec<&str> = patterns.iter().map(|p| p.as_str()).collect();
-    strings.serialize(serializer)
-}
-
-fn deserialize_patterns<'de, D: serde::Deserializer<'de>>(
-    deserializer: D,
-) -> Result<Vec<glob::Pattern>, D::Error> {
-    let strings: Vec<String> = Vec::deserialize(deserializer)?;
-    strings
-        .into_iter()
-        .map(|s| glob::Pattern::new(&s).map_err(serde::de::Error::custom))
-        .collect()
 }
 
 #[derive(Debug)]
