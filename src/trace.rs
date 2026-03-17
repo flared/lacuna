@@ -8,6 +8,7 @@ use tower_http::trace::{
 use tracing::{Span, info};
 
 use crate::http_middleware::auth;
+use crate::http_middleware::user_agent;
 
 #[derive(Debug, Clone)]
 pub struct LacunaMakeSpan;
@@ -20,7 +21,10 @@ impl MakeSpan<Body> for LacunaMakeSpan {
             Some(auth::Identity::LoginUser(email)) => email,
             _ => "-".to_string(),
         };
-        tracing::info_span!("request", %method, %path, %caller)
+        let user_agent = user_agent::get_user_agent(request)
+            .map(|ua| ua.raw)
+            .unwrap_or_else(|| "-".to_string());
+        tracing::info_span!("request", %method, %path, %caller, %user_agent)
     }
 }
 
