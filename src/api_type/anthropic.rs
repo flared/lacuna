@@ -24,11 +24,6 @@ struct AnthropicDataWithUsage {
 
 // SSE streaming event payloads.
 #[derive(Debug, Deserialize)]
-struct SseEventType {
-    r#type: String,
-}
-
-#[derive(Debug, Deserialize)]
 struct MessageStartData {
     message: AnthropicDataWithUsage,
 }
@@ -89,23 +84,33 @@ pub(crate) struct AnthropicSseInspector {
     pub(crate) output_tokens: Option<u64>,
 }
 
+#[derive(Debug, Deserialize)]
+struct SseEventType {
+    r#type: String,
+}
+
 impl AnthropicSseInspector {
     /// Process a single Anthropic JSON event string.
+    /// Used by Bedrock eventstream inspector where event type is embedded in JSON.
     pub(crate) fn process_event_json(&mut self, json: &str) {
         if let Ok(evt) = serde_json::from_str::<SseEventType>(json) {
-            match evt.r#type.as_str() {
-                "message_start" => {
-                    if let Ok(msg) = serde_json::from_str::<MessageStartData>(json) {
-                        self.input_tokens = msg.message.usage.input_tokens;
-                    }
+            self.process_event(evt.r#type.as_str(), json);
+        }
+    }
+
+    fn process_event(&mut self, event_type: &str, data: &str) {
+        match event_type {
+            "message_start" => {
+                if let Ok(msg) = serde_json::from_str::<MessageStartData>(data) {
+                    self.input_tokens = msg.message.usage.input_tokens;
                 }
-                "message_delta" => {
-                    if let Ok(delta) = serde_json::from_str::<AnthropicDataWithUsage>(json) {
-                        self.output_tokens = delta.usage.output_tokens;
-                    }
-                }
-                _ => {}
             }
+            "message_delta" => {
+                if let Ok(delta) = serde_json::from_str::<AnthropicDataWithUsage>(data) {
+                    self.output_tokens = delta.usage.output_tokens;
+                }
+            }
+            _ => {}
         }
     }
 }
@@ -114,7 +119,7 @@ impl Inspector<SseEvent> for AnthropicSseInspector {
     type Output = ResponseMetadata;
 
     fn feed(&mut self, event: SseEvent) {
-        self.process_event_json(&event.data);
+        self.process_event(event.event_type.as_str(), &event.data);
     }
 
     fn finish(self: Box<Self>) -> Result<ResponseMetadata, anyhow::Error> {
