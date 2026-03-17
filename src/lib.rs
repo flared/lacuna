@@ -9,6 +9,7 @@ pub mod logging;
 pub mod metrics;
 pub mod provider;
 pub mod request_metadata;
+pub mod serde_utils;
 pub mod trace;
 pub mod user_agent;
 
