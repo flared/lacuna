@@ -1,4 +1,5 @@
 use crate::http_middleware::auth::Identity;
+use crate::user_agent::UserAgentMetadata;
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ResponseMetadata {
@@ -16,6 +17,7 @@ pub struct RequestMetadata {
     pub provider_key: String,
     pub api_handler_id: String,
     pub user_identity: Option<Identity>,
+    pub user_agent: Option<UserAgentMetadata>,
     pub inspected: Option<RequestInspectionMetadata>,
 }
 

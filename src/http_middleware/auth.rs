@@ -1,4 +1,4 @@
-use axum::{extract::Request, http, middleware::Next, response::Response};
+use axum::{extract::Request, extract::State, http, middleware::Next, response::Response};
 
 #[derive(Clone, Debug)]
 pub enum Identity {
@@ -7,7 +7,7 @@ pub enum Identity {
 }
 
 pub async fn identity_middleware(
-    header_name: String,
+    State(header_name): State<String>,
     mut request: Request,
     next: Next,
 ) -> Response {

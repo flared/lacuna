@@ -10,6 +10,7 @@ pub mod metrics;
 pub mod provider;
 pub mod request_metadata;
 pub mod trace;
+pub mod user_agent;
 
 #[cfg(test)]
 pub mod test_utils;
