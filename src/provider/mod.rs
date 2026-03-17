@@ -4,6 +4,7 @@ mod manager;
 
 use std::{collections::HashMap, str::FromStr};
 
+use crate::authorization::{Authorization, Rule};
 use crate::config;
 use authenticator::{ProviderAuthenticator, build_authenticator};
 use compatibility::Compatibility;
@@ -61,6 +62,7 @@ pub struct Provider {
     pub baseurl: reqwest::Url,
     pub models: Vec<glob::Pattern>,
     pub user_agents: Vec<String>,
+    pub authorizer: Authorization,
     client: reqwest::Client,
     headers: HashMap<String, String>,
     authenticator: Box<dyn ProviderAuthenticator + Send + Sync>,
@@ -71,12 +73,19 @@ impl Provider {
     pub fn from_config(key: &str, config: &config::Provider) -> Result<Self, anyhow::Error> {
         let baseurl = reqwest::Url::parse(&config.baseurl)?;
         let authenticator = build_authenticator(&config.authorization, &config.apikey);
+        let authorizer = Authorization {
+            rules: vec![Rule {
+                providers: vec![],
+                models: config.models.clone(),
+            }],
+        };
         Ok(Self {
             key: key.to_owned(),
             name: config.name.clone(),
             baseurl,
             models: config.models.clone(),
             user_agents: config.user_agents.clone(),
+            authorizer,
             client: reqwest::Client::new(),
             headers: config.headers.clone(),
             authenticator,
