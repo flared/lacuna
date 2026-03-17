@@ -7,7 +7,7 @@ use tracing::{debug, info, warn};
 
 use crate::api_type::{ApiType, ApiTypeHandler, api_type_for_path};
 
-use crate::capabilities::Capabilities;
+use crate::capabilities::{Capabilities, MatchedModel};
 use crate::http_middleware::{auth, capabilities};
 use crate::inspector::CallbackInspector;
 use crate::inspector::DecodingInspector;
@@ -23,12 +23,12 @@ async fn forward_to_provider(
     request: axum::extract::Request,
 ) -> Response {
     if let Some(caps) = capabilities::get_capabilities(&request)
-        && !caps.is_provider_allowed(&provider.key)
+        && !caps.is_allowed(
+            &provider.key,
+            &MatchedModel::None, // TODO(aviau): Actually pass the model.
+        )
     {
-        return capabilities_forbidden_response(
-            &format!("provider '{}' is not allowed", &provider.key),
-            &caps,
-        );
+        return capabilities_forbidden_response("request not allowed by capabilities", &caps);
     }
 
     let method = request.method().to_owned();
@@ -150,7 +150,7 @@ fn wrap_upstream_response(
 fn capabilities_forbidden_response(error: &str, capabilities: &Capabilities) -> Response {
     let body = serde_json::json!({
         "error": error,
-        "capabilities": capabilities,
+        "capabilities": capabilities.capabilities,
     });
     Response::builder()
         .status(StatusCode::FORBIDDEN)
@@ -331,8 +331,8 @@ mod tests {
         assert_eq!(
             body,
             serde_json::json!({
-                "error": "provider 'myprovider' is not allowed",
-                "capabilities":  {"providers": [] }
+                "error": "request not allowed by capabilities",
+                "capabilities": [],
             })
         );
 
