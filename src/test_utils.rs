@@ -52,8 +52,10 @@ pub fn make_provider_with_models(
             name: key.to_owned(),
             description: String::new(),
             baseurl: baseurl.to_owned(),
-            models,
-            user_agents: vec![],
+            capability: config::Capability {
+                models,
+                user_agents: vec![],
+            },
             apikey: String::new(),
             authorization: config::Authorization::None,
             tailnet: false,

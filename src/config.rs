@@ -28,17 +28,8 @@ pub struct Lacuna {
     pub user_agents: Vec<crate::user_agent::UserAgentPatternConfig>,
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
-#[serde(deny_unknown_fields)]
-pub struct Provider {
-    #[serde(default)]
-    pub name: String,
-
-    #[serde(default)]
-    pub description: String,
-
-    pub baseurl: String,
-
+#[derive(Debug, Deserialize, Serialize, PartialEq, Default)]
+pub struct Capability {
     #[serde(
         default,
         serialize_with = "crate::serde_utils::serialize_patterns",
@@ -52,6 +43,21 @@ pub struct Provider {
         deserialize_with = "crate::serde_utils::deserialize_patterns"
     )]
     pub user_agents: Vec<glob::Pattern>,
+}
+
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct Provider {
+    #[serde(default)]
+    pub name: String,
+
+    #[serde(default)]
+    pub description: String,
+
+    pub baseurl: String,
+
+    #[serde(default)]
+    pub capability: Capability,
 
     #[serde(default)]
     pub apikey: String,
@@ -119,8 +125,10 @@ mod tests {
             "openai": {
               "name": "OpenAI",
               "baseurl": "https://api.openai.com/v1",
-              "models": ["gpt-4o", "gpt-4o-mini"],
-              "user_agents": ["claude-code"],
+              "capability": {
+                "models": ["gpt-4o", "gpt-4o-mini"],
+                "user_agents": ["claude-code"]
+              },
               "apikey": "sk-test",
               "authorization": "bearer",
               "compatibility": {
@@ -131,7 +139,7 @@ mod tests {
             "anthropic": {
               "name": "Anthropic",
               "baseurl": "https://api.anthropic.com",
-              "models": ["claude-sonnet-4-20250514"],
+              "capability": { "models": ["claude-sonnet-4-20250514"] },
               "apikey": "sk-ant-test",
               "authorization": "x-api-key",
               "compatibility": {
@@ -142,7 +150,7 @@ mod tests {
             "gemini": {
               "name": "Gemini",
               "baseurl": "https://generativelanguage.googleapis.com",
-              "models": ["gemini-2.0-flash"],
+              "capability": { "models": ["gemini-2.0-flash"] },
               "authorization": "x-goog-api-key",
               "headers": {
                 "x-some-header": "foo"
@@ -157,14 +165,14 @@ mod tests {
         assert_eq!(openai.name, "OpenAI");
         assert_eq!(openai.baseurl, "https://api.openai.com/v1");
         assert_eq!(
-            openai.models,
+            openai.capability.models,
             vec![
                 glob::Pattern::new("gpt-4o").unwrap(),
                 glob::Pattern::new("gpt-4o-mini").unwrap()
             ]
         );
         assert_eq!(
-            openai.user_agents,
+            openai.capability.user_agents,
             vec![glob::Pattern::new("claude-code").unwrap()]
         );
         assert_eq!(openai.apikey, "sk-test");
@@ -195,7 +203,7 @@ mod tests {
             "minimal": {
               "name": "Minimal",
               "baseurl": "https://example.com",
-              "models": ["model-1"]
+              "capability": { "models": ["model-1"] }
             }
           }
         }"#;
@@ -261,8 +269,10 @@ mod tests {
             "openai": {
               "baseurl": "https://api.openai.com/",
               "apikey": "YOUR_OPENAI_KEY",
-              "models": ["gpt-5", "gpt-5-mini", "gpt-4.1"],
-              "user_agents": ["claude-code"],
+              "capability": {
+                "models": ["gpt-5", "gpt-5-mini", "gpt-4.1"],
+                "user_agents": ["claude-code"]
+              },
               "name": "OpenAI",
               "description": "OpenAI models",
               "compatibility": {
@@ -274,12 +284,14 @@ mod tests {
               "baseurl": "https://bedrock-runtime.us-east-1.amazonaws.com",
               "apikey": "bedrock-api-key-xxx",
               "authorization": "bearer",
-              "models": [
-                "us.anthropic.claude-haiku-4-5-20251001-v1:0",
-                "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
-                "us.anthropic.claude-opus-4-5-20251101-v1:0",
-                "us.anthropic.claude-opus-4-6-v1"
-              ],
+              "capability": {
+                "models": [
+                  "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+                  "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+                  "us.anthropic.claude-opus-4-5-20251101-v1:0",
+                  "us.anthropic.claude-opus-4-6-v1"
+                ]
+              },
               "compatibility": {
                 "bedrock_model_invoke": true
               }
@@ -288,7 +300,7 @@ mod tests {
               "baseurl": "https://api.anthropic.com",
               "apikey": "YOUR_ANTHROPIC_KEY",
               "authorization": "x-api-key",
-              "models": ["claude-sonnet-4-5", "claude-haiku-4-5", "claude-opus-4-5"],
+              "capability": { "models": ["claude-sonnet-4-5", "claude-haiku-4-5", "claude-opus-4-5"] },
               "compatibility": {
                 "openai_chat": false,
                 "anthropic_messages": true
@@ -298,7 +310,7 @@ mod tests {
               "baseurl": "https://generativelanguage.googleapis.com",
               "apikey": "YOUR_GEMINI_KEY",
               "authorization": "x-goog-api-key",
-              "models": ["gemini-2.5-flash", "gemini-2.5-pro"],
+              "capability": { "models": ["gemini-2.5-flash", "gemini-2.5-pro"] },
               "name": "Google Gemini",
               "compatibility": {
                 "openai_chat": false,
@@ -309,16 +321,18 @@ mod tests {
               "baseurl": "https://aiplatform.googleapis.com",
               "authorization": "bearer",
               "apikey": "keyfile::ba3..3kb.data...67",
-              "models": [
-                "gemini-2.0-flash-exp",
-                "gemini-2.5-flash",
-                "gemini-2.5-flash-image",
-                "gemini-2.5-pro",
-                "claude-opus-4-5@20251101",
-                "claude-haiku-4-5@20251001",
-                "claude-sonnet-4-5@20250929",
-                "claude-opus-4-6"
-              ],
+              "capability": {
+                "models": [
+                  "gemini-2.0-flash-exp",
+                  "gemini-2.5-flash",
+                  "gemini-2.5-flash-image",
+                  "gemini-2.5-pro",
+                  "claude-opus-4-5@20251101",
+                  "claude-haiku-4-5@20251001",
+                  "claude-sonnet-4-5@20250929",
+                  "claude-opus-4-6"
+                ]
+              },
               "compatibility": {
                 // Gemini model support
                 "google_generate_content": true,
@@ -329,16 +343,18 @@ mod tests {
             "openrouter": {
               "baseurl": "https://openrouter.ai/api/",
               "apikey": "YOUR_OPENROUTER_KEY",
-              "models": [
-                "qwen/qwen3-235b-a22b-2507",
-                "google/gemini-2.5-pro-preview",
-                "x-ai/grok-code-fast-1"
-              ]
+              "capability": {
+                "models": [
+                  "qwen/qwen3-235b-a22b-2507",
+                  "google/gemini-2.5-pro-preview",
+                  "x-ai/grok-code-fast-1"
+                ]
+              }
             },
             "private": {
               "baseurl": "YOUR_PRIVATE_LLM_URL",
               "tailnet": true,
-              "models": ["qwen3-coder-30b", "llama-3.1-70b"]
+              "capability": { "models": ["qwen3-coder-30b", "llama-3.1-70b"] }
             }
           }
         }
