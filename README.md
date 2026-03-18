@@ -11,7 +11,7 @@ It is meant to be deployed in Tailscale to grant AI API access to your tailnet m
 - **Automatic Routing**: Routes requests to the first compatible provider based on which endpoint is called. For example, calls to `/v1/chat/completions` are automatically routed to the first OpenAI-compatible provider.
 - **Provider-Specific Routing**: Dedicated base URL for each provider. For example, calls to `/myprovider/v1/chat/completions` will always route requests to `myprovider`.
 - **Prometheus Metrics**: Exposes Prometheus metrics at `/metrics` for usage monitoring. Includes per-user metrics.
-- **Fine-Grained Permissions**: Control which users can access which providers based on Tailscale application capabilities.
+- **Fine-Grained Permissions**: Control which users can access which providers and models based on Tailscale application capabilities.
 - **Web Interface**: Minimal web interface that displays configured providers.
 
 ## 📋 Changelog
