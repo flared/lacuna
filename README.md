@@ -50,7 +50,7 @@ The provided configuration file may include environment variable substitution us
       "format": "console",
       "level": "info"
     },
-    "capabilities_header": "Tailscale-App-Capability"
+    "capabilities_header": "Tailscale-App-Capability",
     "identity_header": "Tailscale-User-Login"
   },
   "providers": {
@@ -59,6 +59,10 @@ The provided configuration file may include environment variable substitution us
       "baseurl": "https://api.anthropic.com",
       "authorization": "x-api-key",
       "apikey": "${ANTHROPIC_API_KEY}",
+      "capability": {
+        "models": ["claude-*"],
+        "user_agents": ["claude-code"]
+      },
       "compatibility": {
         "anthropic_messages": true
       }
@@ -76,7 +80,7 @@ The provided configuration file may include environment variable substitution us
 }
 ```
 
-### Application Capabilities
+### User Capabilities
 
 When `capabilities_header` is set, Lacuna expects a header that follows the Tailscale application capabilities format:
 
@@ -89,16 +93,41 @@ When `capabilities_header` is set, Lacuna expects a header that follows the Tail
 }
 ```
 
+In the above example, the user may:
+- Use all models of `firstprovider` and `secondprovider`.
+- Use `model-1` in any provider that starts with `thirdprovider-`.
+
 Notes:
-- In the above example, the user may:
-  * Use all models of `firstprovider` and `secondprovider`.
-  * Use `model-1` in any provider that starts with `thirdprovider-`.
 - Providers and models may contain glob patterns.
-- Empty lists and omited values default to `["*"]`.
+- Empty lists and omitted values default to `["*"]`.
 
 More on Tailscale application capabilities:
 - [Tailscale application capabilities documentation](https://tailscale.com/docs/features/access-control/grants/grants-app-capabilities)
 - [examples/tailscale](examples/tailscale)
+
+### Provider Capabilities
+
+When `capability` is set on a provider, Lacuna will use it to filter the requests that are allowed to use that provider:
+
+```json
+{
+  "providers": {
+    "anthropic": {
+      "capability": {
+        "models": ["claude-*"],
+        "user_agents": ["claude-code"]
+      }
+    }
+  }
+}
+```
+
+In the above example:
+- The `anthropic` provider will only allow requests with a User-Agent that match Lacuna's built-in `claude-code` pattern.
+- The `anthropic` provider may only be used with models that match the `claude-*` glob pattern.
+
+Notes:
+- Built-in User-Agent patterns can be found in [src/user_agent.rs](src/user_agent.rs).
 
 ## 📦 Dev Dependencies
 

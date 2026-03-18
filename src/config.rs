@@ -5,6 +5,7 @@ use std::path::Path;
 use std::str::FromStr;
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
     #[serde(default)]
     pub lacuna: Lacuna,
@@ -29,6 +30,7 @@ pub struct Lacuna {
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Default)]
+#[serde(deny_unknown_fields)]
 pub struct Capability {
     #[serde(
         default,
