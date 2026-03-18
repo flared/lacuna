@@ -86,9 +86,12 @@ When `capabilities_header` is set, Lacuna expects a header that follows the Tail
 
 ```json
 {
-  "flare.io/cap/lacuna": [
+  "flare.io/cap/lacuna/grants": [
       { "providers": ["firstprovider", "secondprovider"] },
       { "providers": ["thirdprovider-*"], "models": ["model-1"] }
+  ],
+  "flare.io/cap/lacuna/labels": [
+      { "team": "platform", "env": "production" }
   ]
 }
 ```
@@ -96,6 +99,8 @@ When `capabilities_header` is set, Lacuna expects a header that follows the Tail
 In the above example, the user may:
 - Use all models of `firstprovider` and `secondprovider`.
 - Use `model-1` in any provider that starts with `thirdprovider-`.
+
+The `flare.io/cap/lacuna/labels` key carries flat key-value metadata that is attached to Prometheus metrics and traces for observability.
 
 Notes:
 - Providers and models may contain glob patterns.

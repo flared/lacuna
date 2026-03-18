@@ -61,6 +61,7 @@ pub fn make_provider_with_models(
             tailnet: false,
             compatibility: compat,
             headers: HashMap::new(),
+            labels: HashMap::new(),
         },
     )
     .unwrap()

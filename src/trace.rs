@@ -24,7 +24,7 @@ impl MakeSpan<Body> for LacunaMakeSpan {
         let user_agent = user_agent::get_user_agent(request)
             .map(|ua| ua.raw)
             .unwrap_or_else(|| "-".to_string());
-        tracing::info_span!("request", %method, %path, %caller, %user_agent)
+        tracing::info_span!("request", %method, %path, %caller, %user_agent, request_labels = tracing::field::Empty)
     }
 }
 

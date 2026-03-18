@@ -67,6 +67,7 @@ pub struct Provider {
     headers: HashMap<String, String>,
     authenticator: Box<dyn ProviderAuthenticator + Send + Sync>,
     pub compatibility: Compatibility,
+    pub labels: HashMap<String, String>,
 }
 
 impl Provider {
@@ -91,6 +92,7 @@ impl Provider {
             headers: config.headers.clone(),
             authenticator,
             compatibility: config.compatibility.clone(),
+            labels: config.labels.clone(),
         })
     }
 
@@ -166,6 +168,7 @@ mod tests {
                 tailnet: false,
                 compatibility: config::Compatibility::default(),
                 headers,
+                labels: HashMap::new(),
             },
         )
         .expect("test baseurl should be valid")

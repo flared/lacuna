@@ -74,6 +74,7 @@ mod tests {
             inspected: RequestInspectionMetadata {
                 model: model.map(|m| m.to_string()),
             },
+            labels: std::collections::HashMap::new(),
         }
     }
 
@@ -87,6 +88,7 @@ mod tests {
                 normalized: ua.to_string(),
             }),
             inspected: RequestInspectionMetadata::default(),
+            labels: std::collections::HashMap::new(),
         }
     }
 

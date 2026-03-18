@@ -75,6 +75,9 @@ pub struct Provider {
 
     #[serde(default)]
     pub headers: HashMap<String, String>,
+
+    #[serde(default)]
+    pub labels: HashMap<String, String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Default, PartialEq)]
