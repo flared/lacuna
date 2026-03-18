@@ -7,7 +7,7 @@
       ],
       "dst": ["tag:lacuna"],
       "app": {
-        "flare.io/cap/lacuna": [
+        "flare.io/cap/lacuna/grants": [
           { "providers": ["firstprovider", "secondprovider"] },
           { "providers": ["thirdprovider-*"], "models": ["model-1"] 
         ]

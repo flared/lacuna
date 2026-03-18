@@ -58,19 +58,32 @@ async fn try_forward_to_provider(
         None => Default::default(),
     };
 
+    let mut labels = provider.labels.clone();
+    let caps = capabilities::get_capabilities(&request);
+    if let Some(ref c) = caps {
+        for (k, v) in &c.labels {
+            labels.insert(k.clone(), v.clone());
+        }
+    }
+
+    if !labels.is_empty() {
+        tracing::Span::current().record("request_labels", tracing::field::debug(&labels));
+    }
+
     let request_metadata = RequestMetadata {
         provider_key: provider.key.clone(),
         api_handler_id: api_type_handler_id,
         user_identity: user,
         user_agent,
         inspected: request_inspection_metadata,
+        labels,
     };
 
     if !provider.authorizer.is_allowed(&request_metadata) {
         return forbidden_response("request not allowed by provider");
     }
 
-    if let Some(caps) = capabilities::get_capabilities(&request)
+    if let Some(caps) = caps
         && !Authorization::from(caps.clone()).is_allowed(&request_metadata)
     {
         return capabilities_forbidden_response("request not allowed by capabilities", &caps);
@@ -174,7 +187,7 @@ fn capabilities_forbidden_response(
 ) -> anyhow::Result<Response> {
     let body = serde_json::json!({
         "error": error,
-        "capabilities": capabilities.capabilities,
+        "capabilities": capabilities.grants,
     });
     let resp = Response::builder()
         .status(StatusCode::FORBIDDEN)
@@ -362,7 +375,7 @@ mod tests {
 
         // Request with the capabilities header granting access — should succeed.
         let caps_header = serde_json::json!({
-            "flare.io/cap/lacuna": [
+            "flare.io/cap/lacuna/grants": [
                 {
                     "providers": ["myprovider"],
                     "models": ["us.anthropic.claude-*"]
