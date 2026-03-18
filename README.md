@@ -113,6 +113,7 @@ When `capability` is set on a provider, Lacuna will use it to filter the request
 {
   "providers": {
     "anthropic": {
+      "baseurl": "https://api.anthropic.com",
       "capability": {
         "models": ["claude-*"],
         "user_agents": ["claude-code"]
