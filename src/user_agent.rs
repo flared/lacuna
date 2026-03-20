@@ -66,7 +66,7 @@ impl UserAgentExtractor {
             .collect();
 
         let defaults = vec![
-            ("claude-code", r"(?i)claude[-_]?code"),
+            ("claude-code", r"(?i)claude[-_]?(code|cli)"),
             ("claude-app", r"(?i)claude[-_]?app|ClaudeDesktop"),
             ("cursor", r"(?i)cursor"),
             ("cline", r"(?i)cline"),
@@ -116,6 +116,7 @@ mod tests {
         let extractor = UserAgentExtractor::new(vec![]);
         let cases = vec![
             ("claude-code/1.0.0", "claude-code"),
+            ("claude-cli/2.1.68", "claude-code"),
             ("ClaudeCode/2.1", "claude-code"),
             ("ClaudeDesktop/1.0", "claude-app"),
             ("claude-app/1.0", "claude-app"),
