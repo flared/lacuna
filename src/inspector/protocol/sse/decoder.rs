@@ -160,10 +160,8 @@ impl SseDecoder {
             "event" => {
                 self.event_type_buf = Some(value.to_owned());
             }
-            "id" => {
-                if !value.contains('\0') {
-                    self.last_event_id_buf = value.to_owned();
-                }
+            "id" if !value.contains('\0') => {
+                self.last_event_id_buf = value.to_owned();
             }
             "retry" => {
                 if !value.is_empty()

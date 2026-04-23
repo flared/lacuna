@@ -5,9 +5,15 @@ use serde::Deserialize;
 
 // https://platform.openai.com/docs/api-reference/responses/object
 #[derive(Debug, Deserialize)]
+struct InputTokensDetails {
+    cached_tokens: Option<u64>,
+}
+
+#[derive(Debug, Deserialize)]
 struct OpenAiResponsesUsage {
     input_tokens: u64,
     output_tokens: u64,
+    input_tokens_details: Option<InputTokensDetails>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -26,6 +32,7 @@ impl ApiTypeHandler for OpenAiResponsesHandler {
         &self,
         _status: u16,
         _headers: &http::HeaderMap,
+        _request_metadata: &crate::request_metadata::RequestInspectionMetadata,
     ) -> ResponseMetadataInspector {
         Box::new(ProtocolInspector::new(
             TextProtocol::new(),
@@ -53,9 +60,15 @@ impl Inspector<TextBody> for OpenAiResponsesInspector {
 
 fn parse_responses(data: &[u8]) -> Result<ResponseMetadata, anyhow::Error> {
     let parsed = serde_json::from_slice::<OpenAiResponsesResponse>(data)?;
+    let cache_read_input_tokens = parsed
+        .usage
+        .input_tokens_details
+        .and_then(|d| d.cached_tokens);
     Ok(ResponseMetadata {
         input_tokens: Some(parsed.usage.input_tokens),
         output_tokens: Some(parsed.usage.output_tokens),
+        cache_read_input_tokens,
+        ..Default::default()
     })
 }
 
@@ -64,7 +77,11 @@ mod tests {
     use super::*;
 
     fn make_inspector() -> ResponseMetadataInspector {
-        OpenAiResponsesHandler.response_inspector(200, &http::HeaderMap::new())
+        OpenAiResponsesHandler.response_inspector(
+            200,
+            &http::HeaderMap::new(),
+            &crate::request_metadata::RequestInspectionMetadata::default(),
+        )
     }
 
     #[test]
@@ -94,5 +111,38 @@ mod tests {
         let mut inspector = make_inspector();
         inspector.feed(b"not json");
         assert!(inspector.finish().is_err());
+    }
+
+    #[test]
+    fn inspect_response_cached_tokens() {
+        let body = br#"{
+            "id": "resp_abc123",
+            "object": "response",
+            "model": "gpt-4o",
+            "usage": {
+                "input_tokens": 100,
+                "output_tokens": 30,
+                "input_tokens_details": {"cached_tokens": 60}
+            }
+        }"#;
+        let mut inspector = make_inspector();
+        inspector.feed(body);
+        let metadata = inspector.finish().unwrap();
+        assert_eq!(metadata.input_tokens, Some(100));
+        assert_eq!(metadata.cache_read_input_tokens, Some(60));
+    }
+
+    #[test]
+    fn inspect_response_no_cached_tokens() {
+        let body = br#"{
+            "id": "resp_abc123",
+            "object": "response",
+            "model": "gpt-4o",
+            "usage": {"input_tokens": 10, "output_tokens": 30}
+        }"#;
+        let mut inspector = make_inspector();
+        inspector.feed(body);
+        let metadata = inspector.finish().unwrap();
+        assert_eq!(metadata.cache_read_input_tokens, None);
     }
 }

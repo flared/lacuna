@@ -34,4 +34,14 @@ pub fn record_response(request_metadata: &RequestMetadata, response_metadata: &R
     if total_tokens > 0 {
         metrics::counter!("lacuna_provider_tokens_total", &labels).increment(total_tokens);
     }
+    if let Some(map) = &response_metadata.cache_creation_tokens {
+        for (duration, tokens) in map {
+            let mut l = labels.clone();
+            l.push(("cache_duration".to_owned(), duration.clone()));
+            metrics::counter!("lacuna_provider_tokens_cache_creation_total", &l).increment(*tokens);
+        }
+    }
+    if let Some(tokens) = response_metadata.cache_read_input_tokens {
+        metrics::counter!("lacuna_provider_tokens_cache_read_total", &labels).increment(tokens);
+    }
 }

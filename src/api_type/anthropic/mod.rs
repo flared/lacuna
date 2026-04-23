@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use async_trait::async_trait;
 use axum::body::Body;
 use serde::Deserialize;
@@ -10,9 +12,52 @@ use crate::request_metadata::RequestInspectionMetadata;
 use super::{ApiTypeHandler, Inspector, ResponseMetadata, ResponseMetadataInspector};
 
 #[derive(Debug, Deserialize)]
+struct CacheCreation {
+    ephemeral_5m_input_tokens: Option<u64>,
+    ephemeral_1h_input_tokens: Option<u64>,
+}
+
+#[derive(Debug, Deserialize)]
 struct Usage {
     input_tokens: Option<u64>,
     output_tokens: Option<u64>,
+    cache_creation_input_tokens: Option<u64>,
+    cache_read_input_tokens: Option<u64>,
+    cache_creation: Option<CacheCreation>,
+}
+
+fn build_cache_creation_map(
+    usage: &Usage,
+    cache_ttl_hint: Option<u64>,
+) -> Option<HashMap<String, u64>> {
+    if let Some(cc) = &usage.cache_creation {
+        let mut map = HashMap::new();
+        if let Some(tokens) = cc.ephemeral_5m_input_tokens
+            && tokens > 0
+        {
+            map.insert("5m".to_owned(), tokens);
+        }
+        if let Some(tokens) = cc.ephemeral_1h_input_tokens
+            && tokens > 0
+        {
+            map.insert("1h".to_owned(), tokens);
+        }
+        if map.is_empty() {
+            return None;
+        } else {
+            return Some(map);
+        }
+    } else if let Some(tokens) = usage.cache_creation_input_tokens
+        && tokens > 0
+    {
+        let duration = match cache_ttl_hint {
+            Some(300) => "5m",
+            Some(3600) => "1h",
+            _ => "unknown",
+        };
+        return Some(HashMap::from([(duration.to_owned(), tokens)]));
+    }
+    None
 }
 
 // Payload for both non-streaming and SSE.
@@ -28,8 +73,59 @@ struct MessageStartData {
 }
 
 #[derive(Debug, Deserialize)]
+struct Message {
+    content: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize)]
 struct AnthropicRequestBody {
     model: Option<String>,
+    system: Option<serde_json::Value>,
+    messages: Option<Vec<Message>>,
+}
+
+/// Collect cache_control TTL values from a JSON value that may be a single
+/// content block or an array of content blocks.
+fn collect_cache_ttls(value: &serde_json::Value, ttls: &mut Vec<u64>) {
+    let blocks: Vec<&serde_json::Value> = if let Some(arr) = value.as_array() {
+        arr.iter().collect()
+    } else if value.is_object() {
+        vec![value]
+    } else {
+        return;
+    };
+    for block in blocks {
+        if let Some(cc) = block.get("cache_control") {
+            // cache_control block present → default TTL is 300s when ttl field absent
+            let ttl = cc.get("ttl").and_then(|v| v.as_u64()).unwrap_or(300);
+            ttls.push(ttl);
+        }
+    }
+}
+
+/// Extract a uniform cache TTL from the request body.
+/// Returns Some(ttl) if all cache_control blocks share the same TTL, None if mixed or absent.
+fn extract_cache_ttl(body: &AnthropicRequestBody) -> Option<u64> {
+    let mut ttls = Vec::new();
+    if let Some(system) = &body.system {
+        collect_cache_ttls(system, &mut ttls);
+    }
+    if let Some(messages) = &body.messages {
+        for msg in messages {
+            if let Some(content) = &msg.content {
+                collect_cache_ttls(content, &mut ttls);
+            }
+        }
+    }
+    if ttls.is_empty() {
+        return None;
+    }
+    let first = ttls[0];
+    if ttls.iter().all(|&t| t == first) {
+        Some(first)
+    } else {
+        None
+    }
 }
 
 pub struct AnthropicMessagesHandler;
@@ -59,7 +155,13 @@ impl ApiTypeHandler for AnthropicMessagesHandler {
             }
         };
         let metadata = match serde_json::from_slice::<AnthropicRequestBody>(&bytes) {
-            Ok(body) => RequestInspectionMetadata { model: body.model },
+            Ok(body) => {
+                let cache_ttl_secs = extract_cache_ttl(&body);
+                RequestInspectionMetadata {
+                    model: body.model,
+                    cache_ttl_secs,
+                }
+            }
             Err(e) => {
                 tracing::error!("Failed to parse Anthropic request body: {e}");
                 RequestInspectionMetadata::default()
@@ -73,6 +175,7 @@ impl ApiTypeHandler for AnthropicMessagesHandler {
         &self,
         _status: u16,
         headers: &http::HeaderMap,
+        request_metadata: &RequestInspectionMetadata,
     ) -> ResponseMetadataInspector {
         if is_event_stream(headers) {
             Box::new(ProtocolInspector::new(
@@ -80,6 +183,9 @@ impl ApiTypeHandler for AnthropicMessagesHandler {
                 AnthropicSseInspector {
                     input_tokens: None,
                     output_tokens: None,
+                    cache_creation_tokens: None,
+                    cache_read_input_tokens: None,
+                    cache_ttl_hint: request_metadata.cache_ttl_secs,
                 },
             ))
         } else {
@@ -98,10 +204,12 @@ fn is_event_stream(headers: &http::HeaderMap) -> bool {
         .is_some_and(|ct| ct.starts_with("text/event-stream"))
 }
 
-#[derive(Default)]
 pub(crate) struct AnthropicSseInspector {
     pub(crate) input_tokens: Option<u64>,
     pub(crate) output_tokens: Option<u64>,
+    pub(crate) cache_creation_tokens: Option<HashMap<String, u64>>,
+    pub(crate) cache_read_input_tokens: Option<u64>,
+    pub(crate) cache_ttl_hint: Option<u64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -123,6 +231,9 @@ impl AnthropicSseInspector {
             "message_start" => {
                 if let Ok(msg) = serde_json::from_str::<MessageStartData>(data) {
                     self.input_tokens = msg.message.usage.input_tokens;
+                    self.cache_creation_tokens =
+                        build_cache_creation_map(&msg.message.usage, self.cache_ttl_hint);
+                    self.cache_read_input_tokens = msg.message.usage.cache_read_input_tokens;
                 }
             }
             "message_delta" => {
@@ -146,11 +257,12 @@ impl Inspector<SseEvent> for AnthropicSseInspector {
         if self.input_tokens.is_none() && self.output_tokens.is_none() {
             return Err(anyhow::anyhow!("no token usage found in SSE stream"));
         }
-        let response_metadata = ResponseMetadata {
+        Ok(ResponseMetadata {
             input_tokens: self.input_tokens,
             output_tokens: self.output_tokens,
-        };
-        Ok(response_metadata)
+            cache_creation_tokens: self.cache_creation_tokens,
+            cache_read_input_tokens: self.cache_read_input_tokens,
+        })
     }
 }
 
@@ -173,142 +285,14 @@ impl Inspector<TextBody> for AnthropicJsonInspector {
 
 fn parse_anthropic_json(data: &[u8]) -> Result<ResponseMetadata, anyhow::Error> {
     let parsed = serde_json::from_slice::<AnthropicDataWithUsage>(data)?;
+    let cache_creation_tokens = build_cache_creation_map(&parsed.usage, None);
     Ok(ResponseMetadata {
         input_tokens: parsed.usage.input_tokens,
         output_tokens: parsed.usage.output_tokens,
+        cache_creation_tokens,
+        cache_read_input_tokens: parsed.usage.cache_read_input_tokens,
     })
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn make_request(body: &'static [u8]) -> axum::extract::Request {
-        axum::http::Request::builder()
-            .uri("http://localhost/v1/messages")
-            .body(Body::from(body))
-            .unwrap()
-    }
-
-    fn make_json_inspector() -> ResponseMetadataInspector {
-        AnthropicMessagesHandler.response_inspector(200, &http::HeaderMap::new())
-    }
-
-    fn make_sse_inspector() -> ResponseMetadataInspector {
-        let mut headers = http::HeaderMap::new();
-        headers.insert(
-            http::header::CONTENT_TYPE,
-            "text/event-stream".parse().unwrap(),
-        );
-        AnthropicMessagesHandler.response_inspector(200, &headers)
-    }
-
-    #[tokio::test]
-    async fn inspect_request_model() {
-        let request = make_request(br#"{"model": "claude-sonnet-4-20250514", "max_tokens": 1024, "messages": [{"role": "user", "content": "Hi"}]}"#);
-        let (result, _request) = AnthropicMessagesHandler.inspect_request(request).await;
-        let metadata = result.unwrap();
-        assert_eq!(metadata.model, Some("claude-sonnet-4-20250514".to_owned()));
-    }
-
-    #[tokio::test]
-    async fn inspect_request_no_model() {
-        let request = make_request(br#"{"max_tokens": 1024, "messages": []}"#);
-        let (result, _request) = AnthropicMessagesHandler.inspect_request(request).await;
-        let metadata = result.unwrap();
-        assert_eq!(metadata.model, None);
-    }
-
-    #[tokio::test]
-    async fn inspect_request_invalid_json() {
-        let request = make_request(b"not json");
-        let (result, _request) = AnthropicMessagesHandler.inspect_request(request).await;
-        let metadata = result.unwrap();
-        assert_eq!(metadata.model, None);
-    }
-
-    #[tokio::test]
-    async fn inspect_request_empty_body() {
-        let request = make_request(b"");
-        let (result, _request) = AnthropicMessagesHandler.inspect_request(request).await;
-        let metadata = result.unwrap();
-        assert_eq!(metadata.model, None);
-    }
-
-    #[test]
-    fn inspect_response_full() {
-        let body = br#"{
-            "id": "msg_01XFDUDYJgAACzvnptvVoYEL",
-            "type": "message",
-            "role": "assistant",
-            "content": [{"type": "text", "text": "Hi!"}],
-            "model": "claude-sonnet-4-20250514",
-            "usage": {"input_tokens": 25, "output_tokens": 150}
-        }"#;
-        let mut inspector = make_json_inspector();
-        inspector.feed(body);
-        let metadata = inspector.finish().unwrap();
-        assert_eq!(metadata.input_tokens, Some(25));
-        assert_eq!(metadata.output_tokens, Some(150));
-    }
-
-    #[test]
-    fn inspect_response_missing_usage() {
-        let mut inspector = make_json_inspector();
-        inspector.feed(br#"{"id": "msg_123", "type": "message"}"#);
-        assert!(inspector.finish().is_err());
-    }
-
-    #[test]
-    fn inspect_response_invalid_json() {
-        let mut inspector = make_json_inspector();
-        inspector.feed(b"not json");
-        assert!(inspector.finish().is_err());
-    }
-
-    #[test]
-    fn inspect_response_sse_stream() {
-        let body = br#"event: message_start
-data: {"type":"message_start","message":{"id":"msg_123","type":"message","role":"assistant","content":[],"model":"claude-sonnet-4-20250514","usage":{"input_tokens":25,"output_tokens":1}}}
-
-event: content_block_start
-data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hi!"}}
-
-event: content_block_stop
-data: {"type":"content_block_stop","index":0}
-
-event: message_delta
-data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":150}}
-
-event: message_stop
-data: {"type":"message_stop"}
-
-"#;
-        let mut inspector = make_sse_inspector();
-        inspector.feed(body);
-        let metadata = inspector.finish().unwrap();
-        assert_eq!(metadata.input_tokens, Some(25));
-        assert_eq!(metadata.output_tokens, Some(150));
-    }
-
-    #[test]
-    fn inspect_sse_chunked() {
-        let chunk1 = br#"event: message_start
-data: {"type":"message_start","message":{"id":"msg_123","type":"message","role":"assistant","content":[],"model":"claude-sonnet-4-20250514","usage":{"input_tokens":25,"output_tokens":1}}}
-
-"#;
-        let chunk2 = br#"event: message_delta
-data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":150}}
-
-"#;
-        let mut inspector = make_sse_inspector();
-        inspector.feed(chunk1);
-        inspector.feed(chunk2);
-        let metadata = inspector.finish().unwrap();
-        assert_eq!(metadata.input_tokens, Some(25));
-        assert_eq!(metadata.output_tokens, Some(150));
-    }
-}
+mod tests;

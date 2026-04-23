@@ -27,11 +27,12 @@ impl Inspector<EventstreamEvent> for AnthropicSseInspector {
         if self.input_tokens.is_none() && self.output_tokens.is_none() {
             return Err(anyhow::anyhow!("no token usage found in SSE stream"));
         }
-        let response_metadata = ResponseMetadata {
+        Ok(ResponseMetadata {
             input_tokens: self.input_tokens,
             output_tokens: self.output_tokens,
-        };
-        Ok(response_metadata)
+            cache_creation_tokens: self.cache_creation_tokens,
+            cache_read_input_tokens: self.cache_read_input_tokens,
+        })
     }
 }
 
@@ -56,6 +57,9 @@ mod tests {
                 AnthropicSseInspector {
                     input_tokens: None,
                     output_tokens: None,
+                    cache_creation_tokens: None,
+                    cache_read_input_tokens: None,
+                    cache_ttl_hint: None,
                 },
             ));
 

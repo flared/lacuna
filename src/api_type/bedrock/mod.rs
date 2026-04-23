@@ -44,21 +44,38 @@ impl ApiTypeHandler for BedrockModelInvokeHandler {
         axum::extract::Request,
     ) {
         let model = extract_model_from_path(request.uri().path());
-        (Ok(RequestInspectionMetadata { model }), request)
+        (
+            Ok(RequestInspectionMetadata {
+                model,
+                ..Default::default()
+            }),
+            request,
+        )
     }
 
     fn response_inspector(
         &self,
         status: u16,
         headers: &http::HeaderMap,
+        request_metadata: &RequestInspectionMetadata,
     ) -> ResponseMetadataInspector {
         if is_amazon_event_stream(headers) {
             Box::new(ProtocolInspector::new(
                 AmazonEventstreamProtocol::default(),
-                AnthropicSseInspector::default(),
+                AnthropicSseInspector {
+                    input_tokens: None,
+                    output_tokens: None,
+                    cache_creation_tokens: None,
+                    cache_read_input_tokens: None,
+                    cache_ttl_hint: request_metadata.cache_ttl_secs,
+                },
             ))
         } else {
-            headers_inspector::BedrockModelInvokeJsonHandler.response_inspector(status, headers)
+            headers_inspector::BedrockModelInvokeJsonHandler.response_inspector(
+                status,
+                headers,
+                request_metadata,
+            )
         }
     }
 }
