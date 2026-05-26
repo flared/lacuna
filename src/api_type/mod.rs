@@ -35,6 +35,7 @@ pub trait ApiTypeHandler {
         &self,
         _status: u16,
         _headers: &http::HeaderMap,
+        _request_metadata: &RequestInspectionMetadata,
     ) -> ResponseMetadataInspector {
         Box::new(StaticInspector::default())
     }

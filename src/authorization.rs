@@ -73,6 +73,7 @@ mod tests {
             user_agent: None,
             inspected: RequestInspectionMetadata {
                 model: model.map(|m| m.to_string()),
+                ..Default::default()
             },
             labels: std::collections::HashMap::new(),
         }

@@ -105,11 +105,16 @@ async fn try_forward_to_provider(
     info!(%method, %path, %status, ?model, "upstream_resp");
     metrics::record_request(&request_metadata);
 
-    let upstream_res =
-        wrap_upstream_response(api_type_handler, upstream_res, move |result| match result {
+    let request_inspection_metadata = request_metadata.inspected.clone();
+    let upstream_res = wrap_upstream_response(
+        api_type_handler,
+        upstream_res,
+        &request_inspection_metadata,
+        move |result| match result {
             Ok(metadata) => metrics::record_response(&request_metadata, metadata),
             Err(e) => warn!("Failed to inspect response: {e}"),
-        });
+        },
+    );
     Ok(upstream_res)
 }
 
@@ -141,13 +146,15 @@ pub async fn proxy_handler(
 fn wrap_upstream_response(
     api_type_handler: Option<Box<dyn ApiTypeHandler + Send + Sync>>,
     upstream_res: reqwest::Response,
+    request_inspection_metadata: &crate::request_metadata::RequestInspectionMetadata,
     on_response: impl FnOnce(&Result<ResponseMetadata, anyhow::Error>) + Send + 'static,
 ) -> Response {
     let status_code = upstream_res.status().as_u16();
     let headers = upstream_res.headers().clone();
 
     let body = if let Some(api_type_handler) = api_type_handler {
-        let inspector = api_type_handler.response_inspector(status_code, &headers);
+        let inspector =
+            api_type_handler.response_inspector(status_code, &headers, request_inspection_metadata);
         let inspector = if let Some(encoding) = headers
             .get("content-encoding")
             .and_then(|s| s.to_str().ok())

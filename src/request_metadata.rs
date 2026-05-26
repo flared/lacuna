@@ -6,11 +6,14 @@ use std::collections::HashMap;
 pub struct ResponseMetadata {
     pub input_tokens: Option<u64>,
     pub output_tokens: Option<u64>,
+    pub cache_creation_tokens: Option<HashMap<String, u64>>,
+    pub cache_read_input_tokens: Option<u64>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct RequestInspectionMetadata {
     pub model: Option<String>,
+    pub cache_ttl_secs: Option<u64>,
 }
 
 #[derive(Debug)]
@@ -62,6 +65,7 @@ mod tests {
             user_agent: None,
             inspected: RequestInspectionMetadata {
                 model: Some("gpt-4o".to_owned()),
+                ..Default::default()
             },
             labels,
         }
