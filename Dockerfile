@@ -7,10 +7,13 @@ RUN cargo build --release
 FROM node:24-alpine AS frontend-builder
 RUN corepack enable pnpm
 WORKDIR /build/frontend
-COPY frontend/package.json frontend/pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
+COPY \
+    frontend/package.json \
+    frontend/pnpm-workspace.yaml \
+    frontend/pnpm-lock.yaml ./
+RUN CI=true pnpm install --frozen-lockfile
 COPY frontend/ ./
-RUN pnpm run build
+RUN CI=true pnpm run build
 
 FROM alpine:latest
 COPY --from=api-builder /build/target/release/lacuna /usr/local/bin/lacuna
