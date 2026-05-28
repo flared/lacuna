@@ -9,7 +9,7 @@
       "app": {
         "flare.io/cap/lacuna/grants": [
           { "providers": ["firstprovider", "secondprovider"] },
-          { "providers": ["thirdprovider-*"], "models": ["model-1"] 
+          { "providers": ["thirdprovider-*"], "models": ["model-1"] }
         ]
       }
     }
