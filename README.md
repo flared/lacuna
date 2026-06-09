@@ -150,6 +150,7 @@ In the above example:
 - `{ "rewrite": "<target>" }` ⇒ the model is allowed and the upstream is called with `<target>` instead. In the example, requests for `us.anthropic.claude-opus-4-5*` are sent to Bedrock as the configured application-inference-profile ARN.
 
 Notes:
+- For rewrite resolution, the most specific matching pattern wins.
 - An empty or omitted `models` allows all models (no rewrite).
 - Built-in User-Agent patterns can be found in [src/user_agent.rs](src/user_agent.rs).
 
