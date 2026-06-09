@@ -37,14 +37,14 @@ pub fn make_provider(
     baseurl: &str,
     compat: provider::compatibility::Compatibility,
 ) -> provider::Provider {
-    make_provider_with_models(key, baseurl, compat, vec![])
+    make_provider_with_model_rules(key, baseurl, compat, vec![])
 }
 
-pub fn make_provider_with_models(
+pub fn make_provider_with_model_rules(
     key: &str,
     baseurl: &str,
     compat: provider::compatibility::Compatibility,
-    models: Vec<glob::Pattern>,
+    model_rules: Vec<config::ModelRule>,
 ) -> provider::Provider {
     provider::Provider::from_config(
         key,
@@ -53,7 +53,7 @@ pub fn make_provider_with_models(
             description: String::new(),
             baseurl: baseurl.to_owned(),
             capability: config::Capability {
-                models,
+                model_rules,
                 user_agents: vec![],
             },
             apikey: String::new(),

@@ -211,7 +211,7 @@ mod tests {
 
     use crate::provider::ProviderManager;
     use crate::provider::compatibility::Compatibility;
-    use crate::test_utils::{make_provider, make_provider_with_models, spawn_echo_server};
+    use crate::test_utils::{make_provider, make_provider_with_model_rules, spawn_echo_server};
 
     #[tokio::test]
     async fn unmatched_path_returns_404() {
@@ -412,18 +412,24 @@ mod tests {
         compat.bedrock_model_invoke = true;
 
         let mut manager = ProviderManager::new();
-        manager.add(make_provider_with_models(
+        manager.add(make_provider_with_model_rules(
             "provider-a",
             &format!("http://{addr}"),
             compat.clone(),
-            vec![glob::Pattern::new("*").unwrap()],
+            vec![crate::config::ModelRule {
+                pattern: glob::Pattern::new("*").unwrap(),
+                rewrite: None,
+            }],
         ));
 
-        manager.add(make_provider_with_models(
+        manager.add(make_provider_with_model_rules(
             "provider-b",
             &format!("http://{addr}"),
             compat,
-            vec![glob::Pattern::new("gpt-4o").unwrap()],
+            vec![crate::config::ModelRule {
+                pattern: glob::Pattern::new("gpt-4o").unwrap(),
+                rewrite: None,
+            }],
         ));
 
         let app = crate::app::AppBuilder::new().manager(manager).build();
