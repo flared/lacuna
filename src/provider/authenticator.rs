@@ -62,21 +62,20 @@ impl ProviderAuthenticator for ApiKeyAuth {
 }
 
 pub(super) fn build_authenticator(
-    authorization: &config::Authorization,
-    apikey: &str,
+    authorization: Option<&config::Authorization>,
 ) -> Box<dyn ProviderAuthenticator + Send + Sync> {
     match authorization {
-        config::Authorization::None => Box::new(NoAuth),
-        config::Authorization::Bearer => Box::new(BearerAuth {
-            key: apikey.to_owned(),
+        None => Box::new(NoAuth),
+        Some(config::Authorization::Bearer { apikey }) => Box::new(BearerAuth {
+            key: apikey.clone(),
         }),
-        config::Authorization::XApiKey => Box::new(ApiKeyAuth {
+        Some(config::Authorization::XApiKey { apikey }) => Box::new(ApiKeyAuth {
             header: reqwest::header::HeaderName::from_static("x-api-key"),
-            key: apikey.to_owned(),
+            key: apikey.clone(),
         }),
-        config::Authorization::XGoogApiKey => Box::new(ApiKeyAuth {
+        Some(config::Authorization::XGoogApiKey { apikey }) => Box::new(ApiKeyAuth {
             header: reqwest::header::HeaderName::from_static("x-goog-api-key"),
-            key: apikey.to_owned(),
+            key: apikey.clone(),
         }),
     }
 }
