@@ -60,7 +60,9 @@ The provided configuration file may include environment variable substitution us
       "authorization": "x-api-key",
       "apikey": "${ANTHROPIC_API_KEY}",
       "capability": {
-        "models": ["claude-*"],
+        "models": { 
+          "claude-*": {} 
+        },
         "user_agents": ["claude-code"]
       },
       "compatibility": {
@@ -120,8 +122,19 @@ When `capability` is set on a provider, Lacuna will use it to filter the request
     "anthropic": {
       "baseurl": "https://api.anthropic.com",
       "capability": {
-        "models": ["claude-*"],
+        "models": {
+          "claude-*": {}
+        },
         "user_agents": ["claude-code"]
+      }
+    },
+    "bedrock": {
+      "baseurl": "https://bedrock-runtime.us-east-1.amazonaws.com",
+      "capability": {
+        "models": {
+          "us.anthropic.claude-opus-4-5*": { "rewrite": "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/abcd1234567" },
+          "us.anthropic.claude-haiku-4-5*": {}
+        }
       }
     }
   }
@@ -132,7 +145,12 @@ In the above example:
 - The `anthropic` provider will only allow requests with a User-Agent that match Lacuna's built-in `claude-code` pattern.
 - The `anthropic` provider may only be used with models that match the `claude-*` glob pattern.
 
+`capability.models` maps each model glob pattern to a settings object with an optional `rewrite`:
+- `{}` ⇒ the model is allowed and forwarded as-is.
+- `{ "rewrite": "<target>" }` ⇒ the model is allowed and the upstream is called with `<target>` instead. In the example, requests for `us.anthropic.claude-opus-4-5*` are sent to Bedrock as the configured application-inference-profile ARN.
+
 Notes:
+- An empty or omitted `models` allows all models (no rewrite).
 - Built-in User-Agent patterns can be found in [src/user_agent.rs](src/user_agent.rs).
 
 ## 📦 Dev Dependencies

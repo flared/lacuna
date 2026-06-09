@@ -60,7 +60,7 @@ pub struct Provider {
     #[allow(dead_code)]
     pub name: String,
     pub baseurl: reqwest::Url,
-    pub models: Vec<glob::Pattern>,
+    pub model_rules: Vec<config::ModelRule>,
     pub user_agents: Vec<glob::Pattern>,
     pub authorizer: Authorization,
     client: reqwest::Client,
@@ -74,10 +74,16 @@ impl Provider {
     pub fn from_config(key: &str, config: &config::Provider) -> Result<Self, anyhow::Error> {
         let baseurl = reqwest::Url::parse(&config.baseurl)?;
         let authenticator = build_authenticator(&config.authorization, &config.apikey);
+        let model_patterns: Vec<glob::Pattern> = config
+            .capability
+            .model_rules
+            .iter()
+            .map(|r| r.pattern.clone())
+            .collect();
         let authorizer = Authorization {
             rules: vec![Rule {
                 providers: vec![],
-                models: config.capability.models.clone(),
+                models: model_patterns,
                 user_agents: config.capability.user_agents.clone(),
             }],
         };
@@ -85,7 +91,7 @@ impl Provider {
             key: key.to_owned(),
             name: config.name.clone(),
             baseurl,
-            models: config.capability.models.clone(),
+            model_rules: config.capability.model_rules.clone(),
             user_agents: config.capability.user_agents.clone(),
             authorizer,
             client: reqwest::Client::new(),
@@ -160,7 +166,10 @@ mod tests {
                 description: String::new(),
                 baseurl: baseurl.to_owned(),
                 capability: config::Capability {
-                    models: vec![glob::Pattern::new("model-1").unwrap()],
+                    model_rules: vec![config::ModelRule {
+                        pattern: glob::Pattern::new("model-1").unwrap(),
+                        rewrite: None,
+                    }],
                     user_agents: vec![],
                 },
                 apikey: apikey.to_owned(),
