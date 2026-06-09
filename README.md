@@ -57,8 +57,10 @@ The provided configuration file may include environment variable substitution us
     "anthropic": {
       "name": "Anthropic",
       "baseurl": "https://api.anthropic.com",
-      "authorization": "x-api-key",
-      "apikey": "${ANTHROPIC_API_KEY}",
+      "authorization": {
+        "type": "x-api-key",
+        "apikey": "${ANTHROPIC_API_KEY}"
+      },
       "capability": {
         "models": { 
           "claude-*": {} 
@@ -72,8 +74,10 @@ The provided configuration file may include environment variable substitution us
     "bedrock": {
       "name": "AWS Bedrock",
       "baseurl": "https://bedrock-runtime.us-east-1.amazonaws.com",
-      "authorization": "bearer",
-      "apikey": "${BEDROCK_API_KEY}",
+      "authorization": {
+        "type": "bearer",
+        "apikey": "${BEDROCK_API_KEY}"
+      },
       "compatibility": {
         "bedrock_model_invoke": true
       }
@@ -121,6 +125,7 @@ When `capability` is set on a provider, Lacuna will use it to filter the request
   "providers": {
     "anthropic": {
       "baseurl": "https://api.anthropic.com",
+      "authorization": null,
       "capability": {
         "models": {
           "claude-*": {}

@@ -73,7 +73,7 @@ pub struct Provider {
 impl Provider {
     pub fn from_config(key: &str, config: &config::Provider) -> Result<Self, anyhow::Error> {
         let baseurl = reqwest::Url::parse(&config.baseurl)?;
-        let authenticator = build_authenticator(&config.authorization, &config.apikey);
+        let authenticator = build_authenticator(config.authorization.as_ref());
         let model_patterns: Vec<glob::Pattern> = config
             .capability
             .model_rules
@@ -155,8 +155,7 @@ mod tests {
 
     fn test_provider(
         baseurl: &str,
-        authorization: config::Authorization,
-        apikey: &str,
+        authorization: Option<config::Authorization>,
         headers: HashMap<String, String>,
     ) -> Provider {
         Provider::from_config(
@@ -172,7 +171,6 @@ mod tests {
                     }],
                     user_agents: vec![],
                 },
-                apikey: apikey.to_owned(),
                 authorization,
                 tailnet: false,
                 compatibility: config::Compatibility::default(),
@@ -193,12 +191,7 @@ mod tests {
 
     #[tokio::test]
     async fn rewrites_base_url() {
-        let provider = test_provider(
-            "https://api.anthropic.com",
-            config::Authorization::None,
-            "",
-            HashMap::new(),
-        );
+        let provider = test_provider("https://api.anthropic.com", None, HashMap::new());
         let req = provider
             .build_request(incoming_request("GET", "/v1/messages", Body::empty()))
             .unwrap();
@@ -207,12 +200,7 @@ mod tests {
 
     #[tokio::test]
     async fn preserves_base_url_path() {
-        let provider = test_provider(
-            "https://openrouter.ai/api/",
-            config::Authorization::None,
-            "",
-            HashMap::new(),
-        );
+        let provider = test_provider("https://openrouter.ai/api/", None, HashMap::new());
         let req = provider
             .build_request(incoming_request(
                 "GET",
@@ -230,8 +218,9 @@ mod tests {
     async fn bearer_auth() {
         let provider = test_provider(
             "https://api.example.com",
-            config::Authorization::Bearer,
-            "sk-test-key",
+            Some(config::Authorization::Bearer {
+                apikey: "sk-test-key".into(),
+            }),
             HashMap::new(),
         );
         let req = provider
@@ -247,8 +236,9 @@ mod tests {
     async fn x_api_key_auth() {
         let provider = test_provider(
             "https://api.anthropic.com",
-            config::Authorization::XApiKey,
-            "sk-ant-key",
+            Some(config::Authorization::XApiKey {
+                apikey: "sk-ant-key".into(),
+            }),
             HashMap::new(),
         );
         let req = provider
@@ -262,8 +252,9 @@ mod tests {
     async fn x_goog_api_key_auth() {
         let provider = test_provider(
             "https://generativelanguage.googleapis.com",
-            config::Authorization::XGoogApiKey,
-            "goog-key",
+            Some(config::Authorization::XGoogApiKey {
+                apikey: "goog-key".into(),
+            }),
             HashMap::new(),
         );
         let req = provider
@@ -274,12 +265,7 @@ mod tests {
 
     #[tokio::test]
     async fn no_auth() {
-        let provider = test_provider(
-            "https://example.com",
-            config::Authorization::None,
-            "",
-            HashMap::new(),
-        );
+        let provider = test_provider("https://example.com", None, HashMap::new());
         let req = provider
             .build_request(incoming_request("GET", "/health", Body::empty()))
             .unwrap();
@@ -290,12 +276,7 @@ mod tests {
 
     #[tokio::test]
     async fn preserves_path() {
-        let provider = test_provider(
-            "https://api.example.com/",
-            config::Authorization::None,
-            "",
-            HashMap::new(),
-        );
+        let provider = test_provider("https://api.example.com/", None, HashMap::new());
         let req = provider
             .build_request(incoming_request(
                 "GET",
@@ -311,12 +292,7 @@ mod tests {
 
     #[tokio::test]
     async fn forwards_body() {
-        let provider = test_provider(
-            "https://api.example.com",
-            config::Authorization::None,
-            "",
-            HashMap::new(),
-        );
+        let provider = test_provider("https://api.example.com", None, HashMap::new());
         let payload = b"{\"prompt\":\"hello\"}";
         let req = provider
             .build_request(incoming_request(
@@ -341,8 +317,9 @@ mod tests {
         ]);
         let provider = test_provider(
             "https://api.example.com",
-            config::Authorization::Bearer,
-            "sk-key",
+            Some(config::Authorization::Bearer {
+                apikey: "sk-key".into(),
+            }),
             headers,
         );
         let req = provider

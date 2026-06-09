@@ -112,11 +112,7 @@ pub struct Provider {
     #[serde(default)]
     pub capability: Capability,
 
-    #[serde(default)]
-    pub apikey: String,
-
-    #[serde(default)]
-    pub authorization: Authorization,
+    pub authorization: Option<Authorization>,
 
     #[serde(default)]
     pub tailnet: bool,
@@ -131,14 +127,12 @@ pub struct Provider {
     pub labels: HashMap<String, String>,
 }
 
-#[derive(Debug, Deserialize, Serialize, Default, PartialEq)]
-#[serde(rename_all = "kebab-case")]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
+#[serde(tag = "type", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum Authorization {
-    #[default]
-    None,
-    Bearer,
-    XApiKey,
-    XGoogApiKey,
+    Bearer { apikey: String },
+    XApiKey { apikey: String },
+    XGoogApiKey { apikey: String },
 }
 
 impl FromStr for Config {
@@ -263,8 +257,10 @@ mod tests {
                 },
                 "user_agents": ["claude-code"]
               },
-              "apikey": "sk-test",
-              "authorization": "bearer",
+              "authorization": {
+                "type": "bearer",
+                "apikey": "sk-test"
+              },
               "compatibility": {
                 "openai_chat": true,
                 "openai_responses": true
@@ -278,8 +274,10 @@ mod tests {
                   "claude-sonnet-4-20250514": {}
                 }
               },
-              "apikey": "sk-ant-test",
-              "authorization": "x-api-key",
+              "authorization": {
+                "type": "x-api-key",
+                "apikey": "sk-ant-test"
+              },
               "compatibility": {
                 "anthropic_messages": true,
                 "openai_chat": false
@@ -293,7 +291,10 @@ mod tests {
                   "gemini-2.0-flash": {}
                 }
               },
-              "authorization": "x-goog-api-key",
+              "authorization": {
+                "type": "x-goog-api-key",
+                "apikey": "goog-test"
+              },
               "headers": {
                 "x-some-header": "foo"
               }
@@ -323,19 +324,33 @@ mod tests {
             openai.capability.user_agents,
             vec![glob::Pattern::new("claude-code").unwrap()]
         );
-        assert_eq!(openai.apikey, "sk-test");
-        assert_eq!(openai.authorization, Authorization::Bearer);
+        assert_eq!(
+            openai.authorization,
+            Some(Authorization::Bearer {
+                apikey: "sk-test".into()
+            })
+        );
         assert!(openai.compatibility.openai_chat);
         assert!(openai.compatibility.openai_responses);
         assert!(!openai.compatibility.anthropic_messages);
 
         let anthropic = &config.providers["anthropic"];
-        assert_eq!(anthropic.authorization, Authorization::XApiKey);
+        assert_eq!(
+            anthropic.authorization,
+            Some(Authorization::XApiKey {
+                apikey: "sk-ant-test".into()
+            })
+        );
         assert!(anthropic.compatibility.anthropic_messages);
         assert!(!anthropic.compatibility.openai_chat);
 
         let gemini = &config.providers["gemini"];
-        assert_eq!(gemini.authorization, Authorization::XGoogApiKey);
+        assert_eq!(
+            gemini.authorization,
+            Some(Authorization::XGoogApiKey {
+                apikey: "goog-test".into()
+            })
+        );
         assert!(!gemini.compatibility.openai_chat);
         assert_eq!(
             gemini.headers,
@@ -355,15 +370,15 @@ mod tests {
                 "models": {
                   "model-1": {}
                 }
-              }
+              },
+              "authorization": null
             }
           }
         }"#;
         let config: Config = json5::from_str(json).unwrap();
         let p = &config.providers["minimal"];
         assert_eq!(p.name, "Minimal");
-        assert_eq!(p.apikey, "");
-        assert_eq!(p.authorization, Authorization::None);
+        assert_eq!(p.authorization, None);
         assert!(p.headers.is_empty());
         assert!(!p.tailnet);
         assert_eq!(p.description, "");
@@ -384,14 +399,22 @@ mod tests {
                   "providers": {
                     "openai": {
                       "baseurl": "https://api.openai.com/v1",
-                      "apikey": "${LACUNA_TEST_API_KEY}"
+                      "authorization": {
+                        "type": "bearer",
+                        "apikey": "${LACUNA_TEST_API_KEY}"
+                      }
                     }
                   }
                 }"#,
             )
             .unwrap();
             let config = Config::load(&path).unwrap();
-            assert_eq!(config.providers["openai"].apikey, "sk-from-env");
+            assert_eq!(
+                config.providers["openai"].authorization,
+                Some(Authorization::Bearer {
+                    apikey: "sk-from-env".into()
+                })
+            );
             std::fs::remove_dir_all(&dir).unwrap();
         });
     }
@@ -420,7 +443,10 @@ mod tests {
           "providers": {
             "openai": {
               "baseurl": "https://api.openai.com/",
-              "apikey": "YOUR_OPENAI_KEY",
+              "authorization": {
+                "type": "bearer",
+                "apikey": "YOUR_OPENAI_KEY"
+              },
               "capability": {
                 "models": {
                   "gpt-5": {},
@@ -438,8 +464,10 @@ mod tests {
             },
             "bedrock": {
               "baseurl": "https://bedrock-runtime.us-east-1.amazonaws.com",
-              "apikey": "bedrock-api-key-xxx",
-              "authorization": "bearer",
+              "authorization": {
+                "type": "bearer",
+                "apikey": "bedrock-api-key-xxx"
+              },
               "capability": {
                 "models": {
                   "us.anthropic.claude-haiku-4-5-20251001-v1:0": {},
@@ -454,8 +482,10 @@ mod tests {
             },
             "anthropic": {
               "baseurl": "https://api.anthropic.com",
-              "apikey": "YOUR_ANTHROPIC_KEY",
-              "authorization": "x-api-key",
+              "authorization": {
+                "type": "x-api-key",
+                "apikey": "YOUR_ANTHROPIC_KEY"
+              },
               "capability": {
                 "models": {
                   "claude-sonnet-4-5": {},
@@ -470,8 +500,10 @@ mod tests {
             },
             "gemini": {
               "baseurl": "https://generativelanguage.googleapis.com",
-              "apikey": "YOUR_GEMINI_KEY",
-              "authorization": "x-goog-api-key",
+              "authorization": {
+                "type": "x-goog-api-key",
+                "apikey": "YOUR_GEMINI_KEY"
+              },
               "capability": {
                 "models": {
                   "gemini-2.5-flash": {},
@@ -486,8 +518,10 @@ mod tests {
             },
             "vertex": {
               "baseurl": "https://aiplatform.googleapis.com",
-              "authorization": "bearer",
-              "apikey": "keyfile::ba3..3kb.data...67",
+              "authorization": {
+                "type": "bearer",
+                "apikey": "keyfile::ba3..3kb.data...67"
+              },
               "capability": {
                 "models": {
                   "gemini-2.0-flash-exp": {},
@@ -509,7 +543,10 @@ mod tests {
             },
             "openrouter": {
               "baseurl": "https://openrouter.ai/api/",
-              "apikey": "YOUR_OPENROUTER_KEY",
+              "authorization": {
+                "type": "bearer",
+                "apikey": "YOUR_OPENROUTER_KEY"
+              },
               "capability": {
                 "models": {
                   "qwen/qwen3-235b-a22b-2507": {},
@@ -520,6 +557,7 @@ mod tests {
             },
             "private": {
               "baseurl": "YOUR_PRIVATE_LLM_URL",
+              "authorization": null,
               "tailnet": true,
               "capability": {
                 "models": {
