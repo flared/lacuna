@@ -32,15 +32,15 @@ pub async fn spawn_fixed_response_server(body: &'static str) -> std::net::Socket
     addr
 }
 
-pub fn make_provider(
+pub async fn make_provider(
     key: &str,
     baseurl: &str,
     compat: provider::compatibility::Compatibility,
 ) -> provider::Provider {
-    make_provider_with_model_rules(key, baseurl, compat, vec![])
+    make_provider_with_model_rules(key, baseurl, compat, vec![]).await
 }
 
-pub fn make_provider_with_model_rules(
+pub async fn make_provider_with_model_rules(
     key: &str,
     baseurl: &str,
     compat: provider::compatibility::Compatibility,
@@ -63,5 +63,6 @@ pub fn make_provider_with_model_rules(
             labels: HashMap::new(),
         },
     )
+    .await
     .unwrap()
 }

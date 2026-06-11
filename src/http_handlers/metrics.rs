@@ -49,11 +49,7 @@ mod tests {
         compat.openai_chat = true;
 
         let mut manager = ProviderManager::new();
-        manager.add(make_provider(
-            "test-anon",
-            &format!("http://{addr}"),
-            compat,
-        ));
+        manager.add(make_provider("test-anon", &format!("http://{addr}"), compat).await);
 
         let app = AppBuilder::new().manager(manager).build();
 
@@ -91,11 +87,7 @@ mod tests {
         compat.openai_chat = true;
 
         let mut manager = ProviderManager::new();
-        manager.add(make_provider(
-            "myprovider",
-            &format!("http://{addr}"),
-            compat,
-        ));
+        manager.add(make_provider("myprovider", &format!("http://{addr}"), compat).await);
 
         let app = AppBuilder::new().manager(manager).build();
 
@@ -147,11 +139,7 @@ mod tests {
         compat.openai_chat = true;
 
         let mut manager = ProviderManager::new();
-        manager.add(make_provider(
-            "test-identified",
-            &format!("http://{addr}"),
-            compat,
-        ));
+        manager.add(make_provider("test-identified", &format!("http://{addr}"), compat).await);
 
         let app = AppBuilder::new()
             .manager(manager)

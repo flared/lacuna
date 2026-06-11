@@ -37,25 +37,17 @@ mod tests {
     use crate::provider::compatibility::Compatibility;
     use crate::test_utils::make_provider;
 
-    #[test]
-    fn returns_matching_provider() {
+    #[tokio::test]
+    async fn returns_matching_provider() {
         let mut mgr = ProviderManager::new();
 
         let mut openai_compat = Compatibility::default();
         openai_compat.openai_chat = true;
-        mgr.add(make_provider(
-            "openai",
-            "https://example.com",
-            openai_compat,
-        ));
+        mgr.add(make_provider("openai", "https://example.com", openai_compat).await);
 
         let mut anthropic_compat = Compatibility::default();
         anthropic_compat.anthropic_messages = true;
-        mgr.add(make_provider(
-            "anthropic",
-            "https://example.com",
-            anthropic_compat,
-        ));
+        mgr.add(make_provider("anthropic", "https://example.com", anthropic_compat).await);
 
         let openai = mgr
             .get_for_api_type(&ApiType::OpenAiChatCompletion)
@@ -66,13 +58,13 @@ mod tests {
         assert_eq!(anthropic.name, "anthropic");
     }
 
-    #[test]
-    fn returns_none_when_no_match() {
+    #[tokio::test]
+    async fn returns_none_when_no_match() {
         let mut mgr = ProviderManager::new();
 
         let mut compat = Compatibility::default();
         compat.openai_chat = true;
-        mgr.add(make_provider("openai", "https://example.com", compat));
+        mgr.add(make_provider("openai", "https://example.com", compat).await);
 
         assert!(mgr.get_for_api_type(&ApiType::AnthropicMessages).is_none());
     }

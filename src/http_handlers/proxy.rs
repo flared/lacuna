@@ -1,3 +1,4 @@
+use anyhow::Context;
 use axum::body::Body;
 use axum::extract::State;
 use axum::http::StatusCode;
@@ -106,12 +107,13 @@ async fn try_forward_to_provider(
 
     let upstream_req = provider
         .build_request(request)
-        .map_err(|e| anyhow::anyhow!("failed to build request: {e}"))?;
+        .await
+        .context("failed to build request")?;
 
     let upstream_res = provider
         .send(upstream_req)
         .await
-        .map_err(|e| anyhow::anyhow!("upstream request failed: {e}"))?;
+        .context("upstream request failed")?;
 
     let status = upstream_res.status();
     let model = request_metadata.inspected.model.as_deref();
@@ -251,11 +253,7 @@ mod tests {
         compat.openai_chat = true;
 
         let mut manager = ProviderManager::new();
-        manager.add(make_provider(
-            "provider-key",
-            &format!("http://{addr}"),
-            compat,
-        ));
+        manager.add(make_provider("provider-key", &format!("http://{addr}"), compat).await);
 
         let response = crate::app::AppBuilder::new()
             .manager(manager)
@@ -288,7 +286,7 @@ mod tests {
         compat.openai_chat = true;
 
         let mut manager = ProviderManager::new();
-        manager.add(make_provider("myopenai", &format!("http://{addr}"), compat));
+        manager.add(make_provider("myopenai", &format!("http://{addr}"), compat).await);
 
         let response = crate::app::AppBuilder::new()
             .manager(manager)
@@ -324,11 +322,7 @@ mod tests {
         let compat = Compatibility::default();
 
         let mut manager = ProviderManager::new();
-        manager.add(make_provider(
-            "myprovider",
-            &format!("http://{addr}"),
-            compat,
-        ));
+        manager.add(make_provider("myprovider", &format!("http://{addr}"), compat).await);
 
         let response = crate::app::AppBuilder::new()
             .manager(manager)
@@ -358,11 +352,14 @@ mod tests {
         let addr = spawn_echo_server().await;
 
         let mut manager = ProviderManager::new();
-        manager.add(make_provider(
-            "myprovider",
-            &format!("http://{addr}"),
-            Compatibility::default(),
-        ));
+        manager.add(
+            make_provider(
+                "myprovider",
+                &format!("http://{addr}"),
+                Compatibility::default(),
+            )
+            .await,
+        );
 
         let app = crate::app::AppBuilder::new()
             .manager(manager)
@@ -439,7 +436,7 @@ mod tests {
                         .to_owned(),
                 ),
             }],
-        ));
+        ).await);
 
         let response = crate::app::AppBuilder::new()
             .manager(manager)
@@ -473,15 +470,18 @@ mod tests {
         let addr = spawn_echo_server().await;
 
         let mut manager = ProviderManager::new();
-        manager.add(make_provider_with_model_rules(
-            "p",
-            &format!("http://{addr}"),
-            bedrock_compat(),
-            vec![ModelRule {
-                pattern: glob::Pattern::new("public-model-*").unwrap(),
-                rewrite: Some("internalmodel".to_owned()),
-            }],
-        ));
+        manager.add(
+            make_provider_with_model_rules(
+                "p",
+                &format!("http://{addr}"),
+                bedrock_compat(),
+                vec![ModelRule {
+                    pattern: glob::Pattern::new("public-model-*").unwrap(),
+                    rewrite: Some("internalmodel".to_owned()),
+                }],
+            )
+            .await,
+        );
         let app = crate::app::AppBuilder::new().manager(manager).build();
 
         // The original model is authorized
@@ -529,25 +529,31 @@ mod tests {
         compat.bedrock_model_invoke = true;
 
         let mut manager = ProviderManager::new();
-        manager.add(make_provider_with_model_rules(
-            "provider-a",
-            &format!("http://{addr}"),
-            compat.clone(),
-            vec![ModelRule {
-                pattern: glob::Pattern::new("*").unwrap(),
-                rewrite: None,
-            }],
-        ));
+        manager.add(
+            make_provider_with_model_rules(
+                "provider-a",
+                &format!("http://{addr}"),
+                compat.clone(),
+                vec![ModelRule {
+                    pattern: glob::Pattern::new("*").unwrap(),
+                    rewrite: None,
+                }],
+            )
+            .await,
+        );
 
-        manager.add(make_provider_with_model_rules(
-            "provider-b",
-            &format!("http://{addr}"),
-            compat,
-            vec![ModelRule {
-                pattern: glob::Pattern::new("gpt-4o").unwrap(),
-                rewrite: None,
-            }],
-        ));
+        manager.add(
+            make_provider_with_model_rules(
+                "provider-b",
+                &format!("http://{addr}"),
+                compat,
+                vec![ModelRule {
+                    pattern: glob::Pattern::new("gpt-4o").unwrap(),
+                    rewrite: None,
+                }],
+            )
+            .await,
+        );
 
         let app = crate::app::AppBuilder::new().manager(manager).build();
         let response = app
