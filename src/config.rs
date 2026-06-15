@@ -84,6 +84,7 @@ pub enum Authorization {
     Bearer { apikey: String },
     XApiKey { apikey: String },
     XGoogApiKey { apikey: String },
+    Iam {},
 }
 
 impl FromStr for Config {
@@ -452,6 +453,22 @@ mod tests {
         let serialized = serde_json::to_string(&config).unwrap();
         let roundtripped: Config = json5::from_str(&serialized).unwrap();
         assert_eq!(config, roundtripped);
+    }
+
+    #[test]
+    fn deserialize_iam_authorization() {
+        let auth: Authorization = serde_json::from_str(r#"{ "type": "iam" }"#).unwrap();
+        assert_eq!(auth, Authorization::Iam {});
+
+        // An unknown field is rejected.
+        let err =
+            serde_json::from_str::<Authorization>(r#"{ "type": "iam", "unknown": "unknown" }"#)
+                .unwrap_err()
+                .to_string();
+        assert!(
+            err.contains("unknown field"),
+            "expected error to mention the unknown field, got: {err}"
+        );
     }
 
     #[test]

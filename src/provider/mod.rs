@@ -4,10 +4,12 @@ mod manager;
 
 use std::{collections::HashMap, str::FromStr};
 
+use anyhow::Context;
+
 use crate::authorization::{Authorization, Rule};
 use crate::config;
 use crate::model_rules::ModelRule;
-use authenticator::{Authenticator, build_authenticator};
+use authenticator::{Authenticator, BodyMode, build_authenticator};
 use compatibility::Compatibility;
 
 pub use manager::ProviderManager;
@@ -74,7 +76,10 @@ pub struct Provider {
 impl Provider {
     pub async fn from_config(key: &str, config: &config::Provider) -> Result<Self, anyhow::Error> {
         let baseurl = reqwest::Url::parse(&config.baseurl)?;
-        let authenticator = build_authenticator(config.authorization.as_ref());
+        let authenticator =
+            build_authenticator(config.authorization.as_ref(), &config.compatibility)
+                .await
+                .with_context(|| format!("provider '{key}'"))?;
         let model_patterns: Vec<glob::Pattern> = config
             .capability
             .model_rules
@@ -103,6 +108,12 @@ impl Provider {
         })
     }
 
+    /// Startup check, called once per provider before serving traffic.
+    pub async fn preflight(&self) -> Result<(), anyhow::Error> {
+        self.authenticator.preflight().await?;
+        Ok(())
+    }
+
     pub async fn build_request(
         &self,
         incoming: axum::extract::Request,
@@ -127,7 +138,12 @@ impl Provider {
             );
         }
 
-        let body = reqwest::Body::wrap_stream(body.into_data_stream());
+        let body = match self.authenticator.body_mode() {
+            BodyMode::Buffer { max_bytes } => {
+                reqwest::Body::from(axum::body::to_bytes(body, max_bytes).await?)
+            }
+            BodyMode::Stream => reqwest::Body::wrap_stream(body.into_data_stream()),
+        };
 
         let mut request = self
             .client

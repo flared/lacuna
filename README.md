@@ -81,6 +81,16 @@ The provided configuration file may include environment variable substitution us
       "compatibility": {
         "bedrock_model_invoke": true
       }
+    },
+    "bedrock-iam": {
+      "name": "AWS Bedrock (IAM)",
+      "baseurl": "https://bedrock-runtime.us-east-1.amazonaws.com",
+      "authorization": {
+        "type": "iam"
+      },
+      "compatibility": {
+        "bedrock_model_invoke": true
+      }
     }
   }
 }
