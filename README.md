@@ -154,6 +154,8 @@ In the above example:
 - `{}` ⇒ the model is allowed and forwarded as-is.
 - `{ "rewrite": "<target>" }` ⇒ the model is allowed and the upstream is called with `<target>` instead. In the example, requests for `us.anthropic.claude-opus-4-5*` are sent to Bedrock as the configured application-inference-profile ARN.
 
+At request time, the rewrite is applied **after** authorization passes (authorization always matches the **original** model). For Bedrock, Lacuna replaces the `<model>` segment of the `/model/<model>/invoke[WithResponseStream]` URL path with the percent-encoded rewrite target before forwarding; the request body is left untouched. Other providers do not currently rewrite.
+
 Notes:
 - For rewrite resolution, the most specific matching pattern wins.
 - An empty or omitted `models` allows all models (no rewrite).
