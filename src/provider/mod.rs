@@ -360,14 +360,14 @@ mod tests {
     }
 
     #[test]
-    fn resolve_model_rewrite_matching_rule_with_rewrite() {
+    fn resolved_model_rewrite_match_with_rewrite_rule() {
         let provider = make_provider_with_model_rules(
             "test",
             "https://example.com",
             config::Compatibility::default(),
             vec![config::ModelRule {
                 pattern: glob::Pattern::new("claude-*").unwrap(),
-                rewrite: Some("arn:target".to_owned()),
+                rewrite: Some("target".to_owned()),
             }],
         );
         let resolved_model_rewrite = provider.resolve_model_rewrite("claude-opus", &[]).unwrap();
@@ -376,7 +376,7 @@ mod tests {
     }
 
     #[test]
-    fn resolve_model_rewrite_matching_rule_without_rewrite() {
+    fn no_resolved_model_rewrite_when_no_rewrite_rule() {
         let provider = make_provider_with_model_rules(
             "test",
             "https://example.com",
@@ -390,36 +390,50 @@ mod tests {
     }
 
     #[test]
-    fn resolve_model_rewrite_non_matching_model() {
+    fn no_resolved_model_rewrite_when_no_matching_model() {
         let provider = make_provider_with_model_rules(
             "test",
             "https://example.com",
             config::Compatibility::default(),
             vec![config::ModelRule {
                 pattern: glob::Pattern::new("claude-*").unwrap(),
-                rewrite: Some("arn:target".to_owned()),
+                rewrite: Some("target".to_owned()),
             }],
         );
         assert_eq!(provider.resolve_model_rewrite("gpt-4o", &[]), None);
     }
 
     #[test]
-    fn resolve_model_rewrite_first_match_wins_specific_before_broad() {
+    fn resolved_model_rewrite_first_match_win() {
         let provider = make_provider_with_model_rules(
             "test",
             "https://example.com",
             config::Compatibility::default(),
             vec![
                 config::ModelRule {
+                    pattern: glob::Pattern::new("no-match").unwrap(),
+                    rewrite: Some("no-rewrite".to_owned()),
+                },
+                config::ModelRule {
                     pattern: glob::Pattern::new("claude-opus-*").unwrap(),
-                    rewrite: Some("arn:specific".to_owned()),
+                    rewrite: Some("specific-claude".to_owned()),
                 },
                 config::ModelRule {
                     pattern: glob::Pattern::new("claude-*").unwrap(),
-                    rewrite: Some("arn:broad".to_owned()),
+                    rewrite: Some("broad-claude".to_owned()),
+                },
+                config::ModelRule {
+                    pattern: glob::Pattern::new("gemini-*").unwrap(),
+                    rewrite: Some("broad-gemini".to_owned()),
+                },
+                config::ModelRule {
+                    pattern: glob::Pattern::new("gemini-flash-*").unwrap(),
+                    rewrite: Some("specific-gemini".to_owned()),
                 },
             ],
         );
+
+        // Only the order matters, the specificity doesn't have any impact
         let resolved_model_rewrite = provider
             .resolve_model_rewrite("claude-opus-4-5", &[])
             .unwrap();
@@ -432,21 +446,21 @@ mod tests {
     }
 
     #[test]
-    fn resolve_model_rewrite_no_rewrite_first_short_circuits() {
-        // A broader no-rewrite pattern declared first short-circuits to None even though a
-        // later pattern would rewrite.
+    fn resolved_model_rewrite_no_rewrite_short_circuit() {
+        // A no-rewrite pattern declared first short-circuits to None
+        // even though a later pattern would rewrite.
         let provider = make_provider_with_model_rules(
             "test",
             "https://example.com",
             config::Compatibility::default(),
             vec![
                 config::ModelRule {
-                    pattern: glob::Pattern::new("claude-*").unwrap(),
+                    pattern: glob::Pattern::new("claude-opus*").unwrap(),
                     rewrite: None,
                 },
                 config::ModelRule {
-                    pattern: glob::Pattern::new("claude-opus-*").unwrap(),
-                    rewrite: Some("arn:later".to_owned()),
+                    pattern: glob::Pattern::new("claude-*").unwrap(),
+                    rewrite: Some("later".to_owned()),
                 },
             ],
         );
