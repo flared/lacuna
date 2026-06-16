@@ -92,12 +92,11 @@ async fn try_forward_to_provider(
 
     let mut rewritten_model: Option<String> = None;
     if let Some(model) = request_metadata.inspected.model.as_deref()
-        && let Some(resolved_model_rewrite) =
-            model_rewrite::resolve(model, &[], &provider.model_rules)
+        && let Some(new_name) = model_rewrite::resolve(model, &[], &provider.model_rules)
         && let Some(handler) = api_type_handler.as_ref()
     {
-        rewritten_model = Some(resolved_model_rewrite.new_name.clone());
-        request = handler.rewrite_model_in_request(request, &resolved_model_rewrite)?;
+        request = handler.rewrite_model_in_request(request, &new_name)?;
+        rewritten_model = Some(new_name);
     }
 
     debug!(%method, %path, "downstream_req");
