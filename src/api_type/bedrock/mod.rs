@@ -173,13 +173,10 @@ mod tests {
             "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/abcd1234567";
         let out = rewrite_model_in_path("/model/us.anthropic.claude-opus-4-5/invoke", arn).unwrap();
 
-        // The ARN's reserved characters are encoded so it stays one path segment.
-        assert!(out.starts_with("/model/"));
-        assert!(out.ends_with("/invoke"));
-        assert!(!out.contains(arn));
-        assert_eq!(arn.matches(':').count(), out.matches("%3A").count());
-        assert_eq!(arn.matches('/').count(), out.matches("%2F").count());
-        assert_eq!(arn.matches('-').count(), out.matches("%2D").count());
+        assert_eq!(
+            out,
+            "/model/arn%3Aaws%3Abedrock%3Aus%2Deast%2D1%3A123456789012%3Aapplication%2Dinference%2Dprofile%2Fabcd1234567/invoke"
+        );
     }
 
     #[test]
