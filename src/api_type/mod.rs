@@ -56,7 +56,7 @@ pub trait ApiTypeHandler {
 
     /// Apply `rewrite` to the request wherever this api type carries the model name (url or request body).
     /// Defaults to leaving the request untouched (api types that don't extract a model never reach this path).
-    async fn rewrite_model_in_request(
+    fn rewrite_model_in_request(
         &self,
         request: axum::extract::Request,
         _rewrite: &ResolvedModelRewrite,

@@ -54,7 +54,7 @@ impl ApiTypeHandler for BedrockModelInvokeHandler {
         )
     }
 
-    async fn rewrite_model_in_request(
+    fn rewrite_model_in_request(
         &self,
         request: axum::extract::Request,
         rewrite: &ResolvedModelRewrite,

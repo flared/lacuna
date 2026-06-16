@@ -97,9 +97,7 @@ async fn try_forward_to_provider(
         && let Some(handler) = api_type_handler.as_ref()
     {
         rewritten_model = Some(resolved_model_rewrite.new_name.clone());
-        request = handler
-            .rewrite_model_in_request(request, &resolved_model_rewrite)
-            .await?;
+        request = handler.rewrite_model_in_request(request, &resolved_model_rewrite)?;
     }
 
     debug!(%method, %path, "downstream_req");
