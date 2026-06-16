@@ -46,6 +46,13 @@ pub fn make_provider_with_model_rules(
     compat: provider::compatibility::Compatibility,
     model_rules: Vec<config::ModelRule>,
 ) -> provider::Provider {
+    let model_rules = models
+        .into_iter()
+        .map(|pattern| config::ModelRule {
+            pattern,
+            rewrite: None,
+        })
+        .collect();
     provider::Provider::from_config(
         key,
         &config::Provider {
