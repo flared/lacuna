@@ -6,7 +6,6 @@ use std::{collections::HashMap, str::FromStr};
 
 use crate::authorization::{Authorization, Rule};
 use crate::config;
-use crate::model_rewrite::ResolvedModelRewrite;
 use authenticator::{ProviderAuthenticator, build_authenticator};
 use compatibility::Compatibility;
 
@@ -103,32 +102,6 @@ impl Provider {
         })
     }
 
-    /// Resolve the effective rewrite for `model` (first matching rule)
-    /// Per-user grant rules override provider rewrite rules
-    pub fn resolve_model_rewrite(
-        &self,
-        model: &str,
-        grant_model_rules: &[config::ModelRule],
-    ) -> Option<ResolvedModelRewrite> {
-        let grant_keys: std::collections::HashSet<&str> = grant_model_rules
-            .iter()
-            .map(|r| r.pattern.as_str())
-            .collect();
-        let rule = grant_model_rules
-            .iter()
-            .chain(
-                self.model_rules
-                    .iter()
-                    .filter(|r| !grant_keys.contains(r.pattern.as_str())),
-            )
-            .find(|r| r.pattern.matches(model))?;
-        let rewritten = rule.rewrite.clone()?;
-        Some(ResolvedModelRewrite {
-            original: model.to_owned(),
-            new_name: rewritten,
-        })
-    }
-
     pub fn build_request(
         &self,
         incoming: axum::extract::Request,
@@ -176,7 +149,6 @@ impl Provider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::make_provider_with_model_rules;
     use axum::body::Body;
     use axum::http::Request;
     use std::collections::HashMap;
@@ -357,114 +329,6 @@ mod tests {
         assert_eq!(req.headers().get("x-second-header").unwrap(), "bar");
         // Auth is applied after custom headers, so it should still be present.
         assert_eq!(req.headers().get("authorization").unwrap(), "Bearer sk-key");
-    }
-
-    #[test]
-    fn resolved_model_rewrite_match_with_rewrite_rule() {
-        let provider = make_provider_with_model_rules(
-            "test",
-            "https://example.com",
-            config::Compatibility::default(),
-            vec![config::ModelRule {
-                pattern: glob::Pattern::new("claude-*").unwrap(),
-                rewrite: Some("target".to_owned()),
-            }],
-        );
-        let resolved_model_rewrite = provider.resolve_model_rewrite("claude-opus", &[]).unwrap();
-        assert_eq!(resolved_model_rewrite.original, "claude-opus");
-        assert_eq!(resolved_model_rewrite.new_name, "target");
-    }
-
-    #[test]
-    fn no_resolved_model_rewrite_when_no_rewrite_rule() {
-        let provider = make_provider_with_model_rules(
-            "test",
-            "https://example.com",
-            config::Compatibility::default(),
-            vec![config::ModelRule {
-                pattern: glob::Pattern::new("claude-*").unwrap(),
-                rewrite: None,
-            }],
-        );
-        assert_eq!(provider.resolve_model_rewrite("claude-opus", &[]), None);
-    }
-
-    #[test]
-    fn no_resolved_model_rewrite_when_no_matching_model() {
-        let provider = make_provider_with_model_rules(
-            "test",
-            "https://example.com",
-            config::Compatibility::default(),
-            vec![config::ModelRule {
-                pattern: glob::Pattern::new("claude-*").unwrap(),
-                rewrite: Some("target".to_owned()),
-            }],
-        );
-        assert_eq!(provider.resolve_model_rewrite("gpt-4o", &[]), None);
-    }
-
-    #[test]
-    fn resolved_model_rewrite_first_match_win() {
-        let provider = make_provider_with_model_rules(
-            "test",
-            "https://example.com",
-            config::Compatibility::default(),
-            vec![
-                config::ModelRule {
-                    pattern: glob::Pattern::new("no-match").unwrap(),
-                    rewrite: Some("no-rewrite".to_owned()),
-                },
-                config::ModelRule {
-                    pattern: glob::Pattern::new("claude-opus-*").unwrap(),
-                    rewrite: Some("specific-claude".to_owned()),
-                },
-                config::ModelRule {
-                    pattern: glob::Pattern::new("claude-*").unwrap(),
-                    rewrite: Some("broad-claude".to_owned()),
-                },
-                config::ModelRule {
-                    pattern: glob::Pattern::new("gemini-*").unwrap(),
-                    rewrite: Some("broad-gemini".to_owned()),
-                },
-                config::ModelRule {
-                    pattern: glob::Pattern::new("gemini-flash-*").unwrap(),
-                    rewrite: Some("specific-gemini".to_owned()),
-                },
-            ],
-        );
-
-        // Only the order matters, the specificity doesn't have any impact
-        let resolved_model_rewrite = provider
-            .resolve_model_rewrite("claude-opus-4-5", &[])
-            .unwrap();
-        assert_eq!(resolved_model_rewrite.new_name, "specific-claude");
-
-        let resolved_model_rewrite = provider
-            .resolve_model_rewrite("gemini-flash-3", &[])
-            .unwrap();
-        assert_eq!(resolved_model_rewrite.new_name, "broad-gemini");
-    }
-
-    #[test]
-    fn resolved_model_rewrite_no_rewrite_short_circuit() {
-        // A no-rewrite pattern declared first short-circuits to None
-        // even though a later pattern would rewrite.
-        let provider = make_provider_with_model_rules(
-            "test",
-            "https://example.com",
-            config::Compatibility::default(),
-            vec![
-                config::ModelRule {
-                    pattern: glob::Pattern::new("claude-opus*").unwrap(),
-                    rewrite: None,
-                },
-                config::ModelRule {
-                    pattern: glob::Pattern::new("claude-*").unwrap(),
-                    rewrite: Some("later".to_owned()),
-                },
-            ],
-        );
-        assert_eq!(provider.resolve_model_rewrite("claude-opus-4-5", &[]), None);
     }
 
     #[test]

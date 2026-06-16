@@ -7,6 +7,7 @@ pub mod http_handlers;
 pub mod http_middleware;
 pub mod inspector;
 pub mod logging;
+pub mod matching;
 pub mod metrics;
 pub mod model_rewrite;
 pub mod provider;

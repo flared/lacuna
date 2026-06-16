@@ -14,6 +14,7 @@ use crate::inspector::CallbackInspector;
 use crate::inspector::DecodingInspector;
 use crate::inspector::stream::InspectorStream;
 use crate::metrics;
+use crate::model_rewrite;
 use crate::provider::{self, ProviderManager};
 use crate::request_metadata::{RequestMetadata, ResponseMetadata};
 
@@ -91,7 +92,8 @@ async fn try_forward_to_provider(
 
     let mut rewritten_model: Option<String> = None;
     if let Some(model) = request_metadata.inspected.model.as_deref()
-        && let Some(resolved_model_rewrite) = provider.resolve_model_rewrite(model, &[])
+        && let Some(resolved_model_rewrite) =
+            model_rewrite::resolve(model, &[], &provider.model_rules)
         && let Some(handler) = api_type_handler.as_ref()
     {
         rewritten_model = Some(resolved_model_rewrite.new_name.clone());
