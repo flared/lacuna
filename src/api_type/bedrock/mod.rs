@@ -6,6 +6,7 @@ use crate::inspector::protocol::amazon_eventstream::AmazonEventstreamProtocol;
 
 use super::anthropic::AnthropicSseInspector;
 use super::{ApiTypeHandler, ResponseMetadataInspector};
+use crate::model_rewrite::ResolvedModelRewrite;
 use crate::request_metadata::RequestInspectionMetadata;
 
 pub struct BedrockModelInvokeHandler;
@@ -51,6 +52,14 @@ impl ApiTypeHandler for BedrockModelInvokeHandler {
             }),
             request,
         )
+    }
+
+    async fn rewrite_model_in_request(
+        &self,
+        request: axum::extract::Request,
+        rewrite: &ResolvedModelRewrite,
+    ) -> anyhow::Result<axum::extract::Request> {
+        crate::model_rewrite::rewrite_request_path(request, rewrite)
     }
 
     fn response_inspector(

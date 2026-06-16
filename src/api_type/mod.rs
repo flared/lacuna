@@ -9,6 +9,7 @@ use regex::Regex;
 use std::sync::LazyLock;
 
 pub use crate::inspector::{ByteInspector, Inspector, StaticInspector};
+use crate::model_rewrite::ResolvedModelRewrite;
 pub use crate::request_metadata::{RequestInspectionMetadata, ResponseMetadata};
 
 pub type ResponseMetadataInspector = ByteInspector<ResponseMetadata>;
@@ -51,6 +52,16 @@ pub trait ApiTypeHandler {
         axum::extract::Request,
     ) {
         (Ok(RequestInspectionMetadata::default()), request)
+    }
+
+    /// Apply `rewrite` to the request wherever this api type carries the model name (url or request body).
+    /// Defaults to leaving the request untouched (api types that don't extract a model never reach this path).
+    async fn rewrite_model_in_request(
+        &self,
+        request: axum::extract::Request,
+        _rewrite: &ResolvedModelRewrite,
+    ) -> anyhow::Result<axum::extract::Request> {
+        Ok(request)
     }
 }
 
