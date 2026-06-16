@@ -8,6 +8,7 @@ pub mod http_middleware;
 pub mod inspector;
 pub mod logging;
 pub mod metrics;
+pub mod model_rewrite;
 pub mod provider;
 pub mod request_metadata;
 pub mod serde_utils;
