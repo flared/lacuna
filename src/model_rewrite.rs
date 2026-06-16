@@ -6,27 +6,21 @@ pub struct ResolvedModelRewrite {
     pub new_name: String,
 }
 
-/// Resolve the effective rewrite for `model` (first matching rule).
-/// Per-user grant rules override provider rewrite rules.
+/// Resolve the effective rewrite for `model` (most specific pattern wins)
+/// Grant rules take precedences over provider rules (Still using most specific pattern wins logic)
 pub fn resolve(
     model: &str,
     grant_rules: &[config::ModelRule],
     provider_rules: &[config::ModelRule],
 ) -> Option<ResolvedModelRewrite> {
-    let grant_keys: std::collections::HashSet<&str> =
-        grant_rules.iter().map(|r| r.pattern.as_str()).collect();
-    let rule = grant_rules
-        .iter()
-        .chain(
-            provider_rules
-                .iter()
-                .filter(|r| !grant_keys.contains(r.pattern.as_str())),
-        )
-        .find(|r| r.pattern.matches(model))?;
-    let resolved_model_rewrite = rule.rewrite.clone()?;
+    let rule = match crate::matching::most_specific_match(grant_rules, model, |r| &r.pattern) {
+        Some(grant_rule) => grant_rule,
+        None => crate::matching::most_specific_match(provider_rules, model, |r| &r.pattern)?,
+    };
+    let new_name = rule.rewrite.clone()?;
     Some(ResolvedModelRewrite {
         original: model.to_owned(),
-        new_name: resolved_model_rewrite,
+        new_name,
     })
 }
 
@@ -92,7 +86,7 @@ mod tests {
     }
 
     #[test]
-    fn resolved_model_rewrite_first_match_win() {
+    fn resolved_model_rewrite_most_specific_win() {
         let provider_rules = vec![
             model_rule("no-match", Some("no-rewrite")),
             model_rule("claude-opus-*", Some("specific-claude")),
@@ -101,63 +95,42 @@ mod tests {
             model_rule("gemini-flash-*", Some("specific-gemini")),
         ];
 
-        // Only the order matters, the specificity doesn't have any impact
+        // The most specific matching pattern wins regardless of declaration order
+        // (ordering itself is covered exhaustively in `matching`).
         let resolved_model_rewrite = resolve("claude-opus-4-5", &[], &provider_rules).unwrap();
         assert_eq!(resolved_model_rewrite.new_name, "specific-claude");
 
         let resolved_model_rewrite = resolve("gemini-flash-3", &[], &provider_rules).unwrap();
-        assert_eq!(resolved_model_rewrite.new_name, "broad-gemini");
+        assert_eq!(resolved_model_rewrite.new_name, "specific-gemini");
     }
 
     #[test]
-    fn resolved_model_rewrite_no_rewrite_short_circuit() {
-        // A no-rewrite pattern declared first short-circuits to None
-        // even though a later pattern would rewrite.
+    fn grant_tier_wins_over_provider() {
+        // Any matching grant rule decides the tier outright; provider rules are
+        // consulted only when no grant rule matches. This holds whether the grant
+        // is more or less specific than the provider rule, and a matching grant
+        // with no rewrite shadows the provider to `None`.
         let provider_rules = vec![
-            model_rule("claude-opus*", None),
-            model_rule("claude-*", Some("later")),
-        ];
-        assert_eq!(resolve("claude-opus-4-5", &[], &provider_rules), None);
-    }
-
-    #[test]
-    fn grant_overrides_provider_rewrite_rule_for_same_key() {
-        let provider_rules = vec![
-            model_rule("model-1-*", Some("provider-1")),
-            model_rule("model-2-*", Some("provider-2")),
+            model_rule("claude-opus-4*", Some("provider-specific")),
+            model_rule("gemini-*", Some("provider-gemini")),
         ];
         let grant = vec![
-            model_rule("model-1-*", Some("grant")),
-            model_rule("model-2-*", None),
-        ];
-
-        // Grant update the rewrite rule
-        let resolved_model_rewrite = resolve("model-1-1", &grant, &provider_rules).unwrap();
-        assert_eq!(resolved_model_rewrite.new_name, "grant");
-
-        // Grant override the rewrite rule (Disabling it)
-        assert_eq!(resolve("model-2-2", &grant, &provider_rules), None);
-    }
-
-    #[test]
-    fn grant_rewrite_rules_are_evaluated_before_provider_rewrite_rules() {
-        let provider_rules = vec![
-            model_rule("claude-*", Some("provider-generic")),
-            model_rule("openai-gpt-5*", Some("provider-specific")),
-            model_rule("gemini-*", Some("provider")),
-        ];
-        let grant = vec![
-            model_rule("claude-opus-*", Some("grant-specific")),
-            model_rule("openai-*", Some("grant-generic")),
+            // Less specific than the provider rule it shadows.
+            model_rule("claude-*", Some("grant-claude")),
+            // No rewrite: shadows the provider rule to None.
             model_rule("gemini-flash-*", None),
         ];
-        let resolved_model_rewrite = resolve("claude-opus-4.6", &grant, &provider_rules).unwrap();
-        assert_eq!(resolved_model_rewrite.new_name, "grant-specific");
 
-        let resolved_model_rewrite = resolve("openai-gpt-5.5", &grant, &provider_rules).unwrap();
-        assert_eq!(resolved_model_rewrite.new_name, "grant-generic");
+        // Generic grant shadows the more-specific provider rewrite.
+        let resolved_model_rewrite = resolve("claude-opus-4-8", &grant, &provider_rules).unwrap();
+        assert_eq!(resolved_model_rewrite.new_name, "grant-claude");
 
+        // Matching grant with no rewrite shadows the provider rewrite to None.
         assert_eq!(resolve("gemini-flash-3", &grant, &provider_rules), None);
+
+        // No grant matches: the provider rule applies.
+        let resolved_model_rewrite = resolve("gemini-pro", &grant, &provider_rules).unwrap();
+        assert_eq!(resolved_model_rewrite.new_name, "provider-gemini");
     }
 
     #[test]
