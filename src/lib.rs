@@ -9,7 +9,7 @@ pub mod inspector;
 pub mod logging;
 pub mod matching;
 pub mod metrics;
-pub mod model_rewrite;
+pub mod model_rules;
 pub mod provider;
 pub mod request_metadata;
 pub mod serde_utils;

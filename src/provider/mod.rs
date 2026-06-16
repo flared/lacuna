@@ -6,6 +6,7 @@ use std::{collections::HashMap, str::FromStr};
 
 use crate::authorization::{Authorization, Rule};
 use crate::config;
+use crate::model_rules::ModelRule;
 use authenticator::{ProviderAuthenticator, build_authenticator};
 use compatibility::Compatibility;
 
@@ -60,7 +61,7 @@ pub struct Provider {
     #[allow(dead_code)]
     pub name: String,
     pub baseurl: reqwest::Url,
-    pub model_rules: Vec<config::ModelRule>,
+    pub model_rules: Vec<ModelRule>,
     pub user_agents: Vec<glob::Pattern>,
     pub authorizer: Authorization,
     client: reqwest::Client,
@@ -83,7 +84,7 @@ impl Provider {
         let authorizer = Authorization {
             rules: vec![Rule {
                 providers: vec![],
-                models: model_patterns,
+                model_patterns,
                 user_agents: config.capability.user_agents.clone(),
             }],
         };
@@ -165,7 +166,7 @@ mod tests {
                 description: String::new(),
                 baseurl: baseurl.to_owned(),
                 capability: config::Capability {
-                    model_rules: vec![config::ModelRule {
+                    model_rules: vec![ModelRule {
                         pattern: glob::Pattern::new("model-1").unwrap(),
                         rewrite: None,
                     }],

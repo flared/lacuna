@@ -1,3 +1,13 @@
+/// Returns true if `value` matches any of `patterns`
+/// Empty pattern list is treated as a permissive match-all.
+pub fn permissive_match(patterns: &[glob::Pattern], value: Option<&str>) -> bool {
+    patterns.is_empty()
+        || match value {
+            None => patterns.iter().any(|p| p.matches("")),
+            Some(v) => patterns.iter().any(|p| p.matches(v)),
+        }
+}
+
 /// Pattern specificity as a sort key. Higher = more specific.
 /// Pattern with more literal (non-`*`) characters wins
 /// If equal, fewer `*` wildcards wins

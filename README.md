@@ -94,7 +94,8 @@ When `capabilities_header` is set, Lacuna expects a header that follows the Tail
 {
   "flare.io/cap/lacuna/grants": [
       { "providers": ["firstprovider", "secondprovider"] },
-      { "providers": ["thirdprovider-*"], "models": ["model-1"] }
+      { "providers": ["thirdprovider-*"], "models": { "model-1": {} } },
+      { "providers": ["bedrock"], "models": { "us.anthropic.claude-opus-4-5*": { "rewrite": "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/abcd1234567" } } }
   ],
   "flare.io/cap/lacuna/labels": [
       { "team": "platform", "env": "production" }
@@ -105,12 +106,15 @@ When `capabilities_header` is set, Lacuna expects a header that follows the Tail
 In the above example, the user may:
 - Use all models of `firstprovider` and `secondprovider`.
 - Use `model-1` in any provider that starts with `thirdprovider-`.
+- Use `us.anthropic.claude-opus-4-5*` on `bedrock`, rewritten upstream to the given application-inference-profile ARN.
+
+Grant `models` uses the same object form as a provider's `capability.models` (each glob pattern maps to `{ "rewrite"?: "<target>" }`). Grant rewrites behave like a **PUT**: a grant may **add** or **override** a rewrite, never **remove** one. A grant `rewrite` **overrides** the provider's rewrite for the same model, allowing per-user variation; a grant **without** a `rewrite` does **not** disable the provider's rewrite — it authorizes the model only and the provider's rewrite (if any) still applies. Authorization is still evaluated on the **original** model and remains **conjunctive**: a grant cannot authorize a model the routed provider disallows — the grant's `rewrite` only governs rewrite resolution among already-allowed models.
 
 The `flare.io/cap/lacuna/labels` key carries flat key-value metadata that is attached to Prometheus metrics and traces for observability.
 
 Notes:
-- Providers and models may contain glob patterns.
-- Empty lists and omitted values default to `["*"]`.
+- Providers and model patterns may contain glob patterns.
+- Empty lists and omitted values default to `["*"]` (an empty or omitted `models` allows all models and adds no grant-tier rewrite — the provider's rewrite, if any, still applies).
 
 More on Tailscale application capabilities:
 - [Tailscale application capabilities documentation](https://tailscale.com/docs/features/access-control/grants/grants-app-capabilities)

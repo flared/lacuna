@@ -5,11 +5,28 @@
         "user@example.com",
         "group:engineering"
       ],
-      "dst": ["tag:lacuna"],
+      "dst": [
+        "tag:lacuna"
+      ],
       "app": {
         "flare.io/cap/lacuna/grants": [
-          { "providers": ["firstprovider", "secondprovider"] },
-          { "providers": ["thirdprovider-*"], "models": ["model-1"] }
+          {
+            "providers": [
+              "firstprovider",
+              "secondprovider"
+            ]
+          },
+          {
+            "providers": [
+              "thirdprovider-*"
+            ],
+            "models": {
+              "model-1-*": {},
+              "model-2": {
+                "rewrite": "new-model-name"
+              }
+            }
+          }
         ]
       }
     }
