@@ -431,7 +431,7 @@ mod tests {
             vec![crate::config::ModelRule {
                 pattern: glob::Pattern::new("us.anthropic.claude-opus-4-5*").unwrap(),
                 rewrite: Some(
-                    "arn:aws:bedrock:us-east-1:409905535292:application-inference-profile/11cprf2uimr9"
+                    "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/abcd1234567"
                         .to_owned(),
                 ),
             }],
@@ -457,13 +457,11 @@ mod tests {
         let body = String::from_utf8_lossy(&body);
 
         // Path is rewritten
-        assert!(
-            !body.contains("us.anthropic.claude-opus-4-5x"),
+        assert_eq!(
+            body,
+            "echoed /model/arn%3Aaws%3Abedrock%3Aus%2Deast%2D1%3A123456789012%3Aapplication%2Dinference%2Dprofile%2Fabcd1234567/invoke body-unchanged",
             "unexpected echoed path: {body}"
         );
-
-        // Body is untouched.
-        assert!(body.ends_with("body-unchanged"));
     }
 
     #[tokio::test]
