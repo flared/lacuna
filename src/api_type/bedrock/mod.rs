@@ -197,13 +197,13 @@ mod tests {
     #[test]
     fn rewrite_model_in_request_preserves_query() {
         let request =
-            invoke_request("/model/us.anthropic.claude-sonnet-4-5/invoke?foo=bar&baz=qux");
+            invoke_request("/model/us.anthropic.claude-sonnet-4-5/invoke?foo=bar&baz=qux%26");
         let rewritten = BedrockModelInvokeHandler
             .rewrite_model_in_request(request, "target")
             .unwrap();
         assert_eq!(
             rewritten.uri().path_and_query().unwrap().as_str(),
-            "/model/target/invoke?foo=bar&baz=qux",
+            "/model/target/invoke?foo=bar&baz=qux%26",
         );
     }
 }
