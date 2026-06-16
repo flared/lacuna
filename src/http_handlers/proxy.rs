@@ -89,10 +89,12 @@ async fn try_forward_to_provider(
         return capabilities_forbidden_response("request not allowed by capabilities", &caps);
     }
 
+    let mut rewritten_model: Option<String> = None;
     if let Some(model) = request_metadata.inspected.model.as_deref()
         && let Some(resolved_model_rewrite) = provider.resolve_model_rewrite(model, &[])
         && let Some(handler) = api_type_handler.as_ref()
     {
+        rewritten_model = Some(resolved_model_rewrite.new_name.clone());
         request = handler
             .rewrite_model_in_request(request, &resolved_model_rewrite)
             .await?;
@@ -111,7 +113,7 @@ async fn try_forward_to_provider(
 
     let status = upstream_res.status();
     let model = request_metadata.inspected.model.as_deref();
-    info!(%method, %path, %status, ?model, "upstream_resp");
+    info!(%method, %path, %status, ?model, ?rewritten_model, "upstream_resp");
     metrics::record_request(&request_metadata);
 
     let request_inspection_metadata = request_metadata.inspected.clone();
