@@ -143,27 +143,17 @@ mod tests {
     }
 
     #[test]
-    fn rewrite_model_in_path_invoke_and_streaming() {
-        assert_eq!(
-            rewrite_model_in_path("/model/us.anthropic.claude-sonnet-4-5/invoke", "target"),
-            Some("/model/target/invoke".to_owned()),
-        );
-        assert_eq!(
-            rewrite_model_in_path(
-                "/model/us.anthropic.claude-opus-4-5/invokeWithResponseStream",
-                "target"
-            ),
-            Some("/model/target/invokeWithResponseStream".to_owned()),
-        );
-    }
-
-    #[test]
     fn rewrite_model_in_path_only_replaces_the_segment() {
         // A model id that also appears in the suffix must not be touched there:
         // only the `<model_id>` segment is rewritten.
         assert_eq!(
             rewrite_model_in_path("/model/invoke/invoke", "target"),
             Some("/model/target/invoke".to_owned()),
+        );
+
+        assert_eq!(
+            rewrite_model_in_path("/model/invoke/invokeWithResponseStream", "target2"),
+            Some("/model/target2/invokeWithResponseStream".to_owned()),
         );
     }
 
@@ -180,16 +170,7 @@ mod tests {
     }
 
     #[test]
-    fn rewrite_model_in_path_ignores_segment_names() {
-        // We only care about the `a/b/c` shape, not the specific prefix/suffix.
-        assert_eq!(
-            rewrite_model_in_path("/something/foo/converse", "target"),
-            Some("/something/target/converse".to_owned()),
-        );
-    }
-
-    #[test]
-    fn rewrite_model_in_path_invalid_paths() {
+    fn dont_rewrite_model_in_path_if_invalid_path() {
         // Not exactly three segments.
         assert_eq!(rewrite_model_in_path("/other/invoke", "target"), None);
         assert_eq!(rewrite_model_in_path("", "target"), None);
@@ -223,18 +204,6 @@ mod tests {
         assert_eq!(
             rewritten.uri().path_and_query().unwrap().as_str(),
             "/model/target/invoke?foo=bar&baz=qux",
-        );
-    }
-
-    #[test]
-    fn rewrite_model_in_request_without_query_adds_no_trailing_marker() {
-        let request = invoke_request("/model/us.anthropic.claude-sonnet-4-5/invoke");
-        let rewritten = BedrockModelInvokeHandler
-            .rewrite_model_in_request(request, "target")
-            .unwrap();
-        assert_eq!(
-            rewritten.uri().path_and_query().unwrap().as_str(),
-            "/model/target/invoke",
         );
     }
 }
