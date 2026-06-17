@@ -1153,6 +1153,7 @@ dependencies = [
  "json5",
  "metrics",
  "metrics-exporter-prometheus",
+ "percent-encoding",
  "regex",
  "reqwest",
  "rfc2047-decoder",

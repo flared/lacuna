@@ -52,6 +52,18 @@ pub trait ApiTypeHandler {
     ) {
         (Ok(RequestInspectionMetadata::default()), request)
     }
+
+    /// Apply `rewrite` to the request wherever this api type carries the model name (url or request body).
+    fn rewrite_model_in_request(
+        &self,
+        _request: axum::extract::Request,
+        _new_name: &str,
+    ) -> anyhow::Result<axum::extract::Request> {
+        anyhow::bail!(
+            "model rewrite is not supported for api type '{}'",
+            self.id()
+        )
+    }
 }
 
 impl ApiType {
@@ -106,6 +118,7 @@ pub fn api_type_for_path(path: &str) -> Option<ApiType> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::body::Body;
 
     #[test]
     fn api_type_for_path_cases() {
@@ -166,6 +179,33 @@ mod tests {
         ];
         for (api_type, expected_name) in cases {
             assert_eq!(api_type.handler().id(), expected_name, "{api_type:?}");
+        }
+    }
+
+    #[test]
+    fn rewrite_model_in_request_errors_for_unsupported_api_types() {
+        let unsupported = [
+            ApiType::OpenAiChatCompletion,
+            ApiType::OpenAiResponses,
+            ApiType::AnthropicMessages,
+            ApiType::GeminiGenerateContent,
+            ApiType::GoogleGenerateContent,
+            ApiType::GoogleRawPredict,
+        ];
+        for api_type in unsupported {
+            let handler = api_type.handler();
+            let request = axum::http::Request::builder()
+                .uri("/v1/messages")
+                .body(Body::empty())
+                .unwrap();
+            let err = handler
+                .rewrite_model_in_request(request, "target")
+                .expect_err(&format!("{api_type:?} should not support model rewrite"));
+
+            assert!(
+                err.to_string().contains(handler.id()),
+                "{api_type:?}: error should mention the api type id, got: {err}"
+            );
         }
     }
 }

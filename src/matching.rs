@@ -66,7 +66,10 @@ mod tests {
             pattern("claude-*-4-8"),
             pattern("claude-opus-4*"),
         ];
-        assert_eq!(get_most_specific_pattern(&patterns, "claude-opus-4-8"), Some("claude-opus-4*"));
+        assert_eq!(
+            get_most_specific_pattern(&patterns, "claude-opus-4-8"),
+            Some("claude-opus-4*")
+        );
     }
 
     #[test]
@@ -78,7 +81,10 @@ mod tests {
             pattern("claude-*"),
             pattern("*-opus-4-8"),
         ];
-        assert_eq!(get_most_specific_pattern(&shuffled, value), Some("claude-opus-4*"));
+        assert_eq!(
+            get_most_specific_pattern(&shuffled, value),
+            Some("claude-opus-4*")
+        );
     }
 
     #[test]

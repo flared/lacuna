@@ -14,6 +14,7 @@ use crate::inspector::CallbackInspector;
 use crate::inspector::DecodingInspector;
 use crate::inspector::stream::InspectorStream;
 use crate::metrics;
+use crate::model_rewrite;
 use crate::provider::{self, ProviderManager};
 use crate::request_metadata::{RequestMetadata, ResponseMetadata};
 
@@ -89,6 +90,15 @@ async fn try_forward_to_provider(
         return capabilities_forbidden_response("request not allowed by capabilities", &caps);
     }
 
+    let mut rewritten_model: Option<String> = None;
+    if let Some(model) = request_metadata.inspected.model.as_deref()
+        && let Some(new_name) = model_rewrite::resolve(model, &[], &provider.model_rules)
+        && let Some(handler) = api_type_handler.as_ref()
+    {
+        request = handler.rewrite_model_in_request(request, &new_name)?;
+        rewritten_model = Some(new_name);
+    }
+
     debug!(%method, %path, "downstream_req");
 
     let upstream_req = provider
@@ -102,7 +112,7 @@ async fn try_forward_to_provider(
 
     let status = upstream_res.status();
     let model = request_metadata.inspected.model.as_deref();
-    info!(%method, %path, %status, ?model, "upstream_resp");
+    info!(%method, %path, %status, ?model, ?rewritten_model, "upstream_resp");
     metrics::record_request(&request_metadata);
 
     let request_inspection_metadata = request_metadata.inspected.clone();
@@ -401,6 +411,109 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    fn bedrock_compat() -> Compatibility {
+        let mut compat = Compatibility::default();
+        compat.bedrock_model_invoke = true;
+        compat
+    }
+
+    #[tokio::test]
+    async fn model_rewrite_applied_to_bedrock_path() {
+        let addr = spawn_echo_server().await;
+
+        let mut manager = ProviderManager::new();
+        manager.add(make_provider_with_model_rules(
+            "p",
+            &format!("http://{addr}"),
+            bedrock_compat(),
+            vec![crate::config::ModelRule {
+                pattern: glob::Pattern::new("us.anthropic.claude-opus-4-5*").unwrap(),
+                rewrite: Some(
+                    "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/abcd1234567"
+                        .to_owned(),
+                ),
+            }],
+        ));
+
+        let response = crate::app::AppBuilder::new()
+            .manager(manager)
+            .build()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/p/model/us.anthropic.claude-opus-4-5x/invoke")
+                    .body(Body::from("body-unchanged"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body = String::from_utf8_lossy(&body);
+
+        // Path is rewritten
+        assert_eq!(
+            body,
+            "echoed /model/arn%3Aaws%3Abedrock%3Aus%2Deast%2D1%3A123456789012%3Aapplication%2Dinference%2Dprofile%2Fabcd1234567/invoke body-unchanged",
+            "unexpected echoed path: {body}"
+        );
+    }
+
+    #[tokio::test]
+    async fn authorization_is_verified_against_original_model_not_rewrite_target() {
+        let addr = spawn_echo_server().await;
+
+        let mut manager = ProviderManager::new();
+        manager.add(make_provider_with_model_rules(
+            "p",
+            &format!("http://{addr}"),
+            bedrock_compat(),
+            vec![crate::config::ModelRule {
+                pattern: glob::Pattern::new("public-model-*").unwrap(),
+                rewrite: Some("internalmodel".to_owned()),
+            }],
+        ));
+        let app = crate::app::AppBuilder::new().manager(manager).build();
+
+        // The original model is authorized
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/p/model/public-model-4-6/invoke")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body = String::from_utf8_lossy(&body);
+        assert!(
+            body.contains("/model/internalmodel/invoke"),
+            "expected rewrite to the target model, got: {body}"
+        );
+
+        // The rewrite target is not authorized
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/p/model/internalmodel/invoke")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
     }
 
     #[tokio::test]
