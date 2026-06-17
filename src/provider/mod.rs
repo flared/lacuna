@@ -7,7 +7,7 @@ use std::{collections::HashMap, str::FromStr};
 use crate::authorization::{Authorization, Rule};
 use crate::config;
 use crate::model_rules::ModelRule;
-use authenticator::{ProviderAuthenticator, build_authenticator};
+use authenticator::{Authenticator, build_authenticator};
 use compatibility::Compatibility;
 
 pub use manager::ProviderManager;
@@ -66,13 +66,13 @@ pub struct Provider {
     pub authorizer: Authorization,
     client: reqwest::Client,
     headers: HashMap<String, String>,
-    authenticator: Box<dyn ProviderAuthenticator + Send + Sync>,
+    authenticator: Authenticator,
     pub compatibility: Compatibility,
     pub labels: HashMap<String, String>,
 }
 
 impl Provider {
-    pub fn from_config(key: &str, config: &config::Provider) -> Result<Self, anyhow::Error> {
+    pub async fn from_config(key: &str, config: &config::Provider) -> Result<Self, anyhow::Error> {
         let baseurl = reqwest::Url::parse(&config.baseurl)?;
         let authenticator = build_authenticator(config.authorization.as_ref());
         let model_patterns: Vec<glob::Pattern> = config
@@ -103,7 +103,7 @@ impl Provider {
         })
     }
 
-    pub fn build_request(
+    pub async fn build_request(
         &self,
         incoming: axum::extract::Request,
     ) -> Result<reqwest::Request, anyhow::Error> {
@@ -135,7 +135,7 @@ impl Provider {
             .headers(headers)
             .body(body)
             .build()?;
-        self.authenticator.authenticate(&mut request)?;
+        self.authenticator.authenticate(&mut request).await?;
         Ok(request)
     }
 
@@ -154,7 +154,7 @@ mod tests {
     use axum::http::Request;
     use std::collections::HashMap;
 
-    fn test_provider(
+    async fn test_provider(
         baseurl: &str,
         authorization: Option<config::Authorization>,
         headers: HashMap<String, String>,
@@ -179,6 +179,7 @@ mod tests {
                 labels: HashMap::new(),
             },
         )
+        .await
         .expect("test baseurl should be valid")
     }
 
@@ -192,22 +193,24 @@ mod tests {
 
     #[tokio::test]
     async fn rewrites_base_url() {
-        let provider = test_provider("https://api.anthropic.com", None, HashMap::new());
+        let provider = test_provider("https://api.anthropic.com", None, HashMap::new()).await;
         let req = provider
             .build_request(incoming_request("GET", "/v1/messages", Body::empty()))
+            .await
             .unwrap();
         assert_eq!(req.url().as_str(), "https://api.anthropic.com/v1/messages");
     }
 
     #[tokio::test]
     async fn preserves_base_url_path() {
-        let provider = test_provider("https://openrouter.ai/api/", None, HashMap::new());
+        let provider = test_provider("https://openrouter.ai/api/", None, HashMap::new()).await;
         let req = provider
             .build_request(incoming_request(
                 "GET",
                 "/v1/chat/completions",
                 Body::empty(),
             ))
+            .await
             .unwrap();
         assert_eq!(
             req.url().as_str(),
@@ -223,9 +226,11 @@ mod tests {
                 apikey: "sk-test-key".into(),
             }),
             HashMap::new(),
-        );
+        )
+        .await;
         let req = provider
             .build_request(incoming_request("POST", "/v1/chat", Body::empty()))
+            .await
             .unwrap();
         assert_eq!(
             req.headers().get("authorization").unwrap(),
@@ -241,9 +246,11 @@ mod tests {
                 apikey: "sk-ant-key".into(),
             }),
             HashMap::new(),
-        );
+        )
+        .await;
         let req = provider
             .build_request(incoming_request("POST", "/v1/messages", Body::empty()))
+            .await
             .unwrap();
         assert_eq!(req.headers().get("x-api-key").unwrap(), "sk-ant-key");
         assert!(req.headers().get("authorization").is_none());
@@ -257,18 +264,21 @@ mod tests {
                 apikey: "goog-key".into(),
             }),
             HashMap::new(),
-        );
+        )
+        .await;
         let req = provider
             .build_request(incoming_request("POST", "/v1/models", Body::empty()))
+            .await
             .unwrap();
         assert_eq!(req.headers().get("x-goog-api-key").unwrap(), "goog-key");
     }
 
     #[tokio::test]
     async fn no_auth() {
-        let provider = test_provider("https://example.com", None, HashMap::new());
+        let provider = test_provider("https://example.com", None, HashMap::new()).await;
         let req = provider
             .build_request(incoming_request("GET", "/health", Body::empty()))
+            .await
             .unwrap();
         assert!(req.headers().get("authorization").is_none());
         assert!(req.headers().get("x-api-key").is_none());
@@ -277,13 +287,14 @@ mod tests {
 
     #[tokio::test]
     async fn preserves_path() {
-        let provider = test_provider("https://api.example.com/", None, HashMap::new());
+        let provider = test_provider("https://api.example.com/", None, HashMap::new()).await;
         let req = provider
             .build_request(incoming_request(
                 "GET",
                 "/v1/models?limit=10",
                 Body::empty(),
             ))
+            .await
             .unwrap();
         assert_eq!(
             req.url().as_str(),
@@ -293,7 +304,7 @@ mod tests {
 
     #[tokio::test]
     async fn forwards_body() {
-        let provider = test_provider("https://api.example.com", None, HashMap::new());
+        let provider = test_provider("https://api.example.com", None, HashMap::new()).await;
         let payload = b"{\"prompt\":\"hello\"}";
         let req = provider
             .build_request(incoming_request(
@@ -301,6 +312,7 @@ mod tests {
                 "/v1/chat",
                 Body::from(payload.to_vec()),
             ))
+            .await
             .unwrap();
         assert_eq!(req.method(), "POST");
         assert_eq!(req.url().as_str(), "https://api.example.com/v1/chat");
@@ -322,9 +334,11 @@ mod tests {
                 apikey: "sk-key".into(),
             }),
             headers,
-        );
+        )
+        .await;
         let req = provider
             .build_request(incoming_request("POST", "/v1/chat", Body::empty()))
+            .await
             .unwrap();
         assert_eq!(req.headers().get("x-first-header").unwrap(), "foo");
         assert_eq!(req.headers().get("x-second-header").unwrap(), "bar");

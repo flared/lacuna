@@ -98,11 +98,14 @@ mod tests {
     #[tokio::test]
     async fn test_config() {
         let mut manager = ProviderManager::new();
-        manager.add(make_provider(
-            "test-provider",
-            "https://api.example.com",
-            Default::default(),
-        ));
+        manager.add(
+            make_provider(
+                "test-provider",
+                "https://api.example.com",
+                Default::default(),
+            )
+            .await,
+        );
 
         let response = crate::app::AppBuilder::new()
             .manager(manager)

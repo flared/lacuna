@@ -46,13 +46,14 @@ mod tests {
         }
     }
 
-    fn provider_with_rules(rules: Vec<ModelRule>) -> Provider {
+    async fn provider_with_rules(rules: Vec<ModelRule>) -> Provider {
         crate::test_utils::make_provider_with_model_rules(
             "p",
             "http://example.com",
             Compatibility::default(),
             rules,
         )
+        .await
     }
 
     fn caps_with_rules(rules: Vec<ModelRule>) -> Capabilities {
@@ -66,18 +67,20 @@ mod tests {
         }
     }
 
-    #[test]
-    fn grant_rewrite_overrides_provider_on_identical_pattern() {
-        let provider = provider_with_rules(vec![model_rule("claude-*", Some("provider-target"))]);
+    #[tokio::test]
+    async fn grant_rewrite_overrides_provider_on_identical_pattern() {
+        let provider =
+            provider_with_rules(vec![model_rule("claude-*", Some("provider-target"))]).await;
         let caps = caps_with_rules(vec![model_rule("claude-*", Some("grant-target"))]);
         let merged = merge_model_rules(&provider, Some(&caps), None);
 
         assert_eq!(merged, vec![model_rule("claude-*", Some("grant-target"))]);
     }
 
-    #[test]
-    fn empty_grant_rule_does_not_remove_provider_rewrite() {
-        let provider = provider_with_rules(vec![model_rule("claude-*", Some("provider-target"))]);
+    #[tokio::test]
+    async fn empty_grant_rule_does_not_remove_provider_rewrite() {
+        let provider =
+            provider_with_rules(vec![model_rule("claude-*", Some("provider-target"))]).await;
         let caps = caps_with_rules(vec![model_rule("claude-*", None)]);
         let merged = merge_model_rules(&provider, Some(&caps), None);
 

@@ -44,10 +44,12 @@ async fn main() {
 
     let mut manager = ProviderManager::new();
     for (key, provider_config) in &config.providers {
-        let provider = Provider::from_config(key, provider_config).unwrap_or_else(|e| {
-            error!(provider = %key, %e, "failed to configure provider");
-            std::process::exit(1);
-        });
+        let provider = Provider::from_config(key, provider_config)
+            .await
+            .unwrap_or_else(|e| {
+                error!(provider = %key, %e, "failed to configure provider");
+                std::process::exit(1);
+            });
         manager.add(provider);
     }
 
