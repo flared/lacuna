@@ -47,9 +47,13 @@ async fn main() {
         let provider = Provider::from_config(key, provider_config)
             .await
             .unwrap_or_else(|e| {
-                error!(provider = %key, %e, "failed to configure provider");
+                error!(provider = %key, error = format!("{e:#}"), "failed to configure provider");
                 std::process::exit(1);
             });
+        provider.preflight().await.unwrap_or_else(|e| {
+            error!(provider = %key, error = format!("{e:#}"), "provider failed preflight check");
+            std::process::exit(1);
+        });
         manager.add(provider);
     }
 

@@ -27,7 +27,7 @@ async fn forward_to_provider(
     try_forward_to_provider(provider, api_type, request)
         .await
         .unwrap_or_else(|e| {
-            error!("forward_to_provider failed: {e:#}");
+            error!(provider = %provider.key, error = format!("{e:#}"), "forward_to_provider failed");
             (StatusCode::BAD_GATEWAY, "internal server error").into_response()
         })
 }
