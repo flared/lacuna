@@ -14,7 +14,7 @@ use crate::inspector::CallbackInspector;
 use crate::inspector::DecodingInspector;
 use crate::inspector::stream::InspectorStream;
 use crate::metrics;
-use crate::model_rewrite;
+use crate::model_rules;
 use crate::provider::{self, ProviderManager};
 use crate::request_metadata::{RequestMetadata, ResponseMetadata};
 
@@ -40,6 +40,7 @@ async fn try_forward_to_provider(
     let path = request.uri().path().to_owned();
     let user = auth::get_caller_identity(&request);
     let user_agent = user_agent::get_user_agent(&request);
+    let normalized_user_agent = user_agent.as_ref().map(|u| u.normalized.clone());
     let api_type_handler = api_type.map(|t| t.handler());
     let api_type_handler_id = api_type_handler
         .as_ref()
@@ -84,15 +85,17 @@ async fn try_forward_to_provider(
         return forbidden_response("request not allowed by provider");
     }
 
-    if let Some(caps) = caps
+    if let Some(caps) = caps.as_ref()
         && !Authorization::from(caps.clone()).is_allowed(&request_metadata)
     {
-        return capabilities_forbidden_response("request not allowed by capabilities", &caps);
+        return capabilities_forbidden_response("request not allowed by capabilities", caps);
     }
 
+    let model_rules =
+        model_rules::merge_model_rules(provider, caps.as_ref(), normalized_user_agent.as_deref());
     let mut rewritten_model: Option<String> = None;
     if let Some(model) = request_metadata.inspected.model.as_deref()
-        && let Some(new_name) = model_rewrite::resolve(model, &[], &provider.model_rules)
+        && let Some(new_name) = model_rules::get_rewritten_name(model, &model_rules)
         && let Some(handler) = api_type_handler.as_ref()
     {
         request = handler.rewrite_model_in_request(request, &new_name)?;
@@ -219,6 +222,7 @@ mod tests {
     use axum::http::{Request, StatusCode};
     use tower::ServiceExt;
 
+    use crate::model_rules::ModelRule;
     use crate::provider::ProviderManager;
     use crate::provider::compatibility::Compatibility;
     use crate::test_utils::{make_provider, make_provider_with_model_rules, spawn_echo_server};
@@ -395,7 +399,7 @@ mod tests {
             "flare.io/cap/lacuna/grants": [
                 {
                     "providers": ["myprovider"],
-                    "models": ["us.anthropic.claude-*"]
+                    "models": {"us.anthropic.claude-*": {}}
                 }
             ]
         });
@@ -428,7 +432,7 @@ mod tests {
             "p",
             &format!("http://{addr}"),
             bedrock_compat(),
-            vec![crate::config::ModelRule {
+            vec![ModelRule {
                 pattern: glob::Pattern::new("us.anthropic.claude-opus-4-5*").unwrap(),
                 rewrite: Some(
                     "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/abcd1234567"
@@ -473,7 +477,7 @@ mod tests {
             "p",
             &format!("http://{addr}"),
             bedrock_compat(),
-            vec![crate::config::ModelRule {
+            vec![ModelRule {
                 pattern: glob::Pattern::new("public-model-*").unwrap(),
                 rewrite: Some("internalmodel".to_owned()),
             }],
@@ -529,7 +533,7 @@ mod tests {
             "provider-a",
             &format!("http://{addr}"),
             compat.clone(),
-            vec![crate::config::ModelRule {
+            vec![ModelRule {
                 pattern: glob::Pattern::new("*").unwrap(),
                 rewrite: None,
             }],
@@ -539,7 +543,7 @@ mod tests {
             "provider-b",
             &format!("http://{addr}"),
             compat,
-            vec![crate::config::ModelRule {
+            vec![ModelRule {
                 pattern: glob::Pattern::new("gpt-4o").unwrap(),
                 rewrite: None,
             }],

@@ -1,3 +1,5 @@
+use crate::matching::permissive_match;
+use crate::model_rules::ModelRule;
 use serde::Deserialize;
 use serde::Serialize;
 use serde_with::DefaultOnError;
@@ -21,16 +23,29 @@ pub struct Grant {
     pub providers: Vec<glob::Pattern>,
 
     #[serde(
-        serialize_with = "crate::serde_utils::serialize_patterns",
-        deserialize_with = "crate::serde_utils::deserialize_patterns"
+        rename = "models",
+        default,
+        serialize_with = "crate::model_rules::serialize_model_rules",
+        deserialize_with = "crate::model_rules::deserialize_model_rules"
     )]
-    pub models: Vec<glob::Pattern>,
+    pub model_rules: Vec<ModelRule>,
 
     #[serde(
         serialize_with = "crate::serde_utils::serialize_patterns",
         deserialize_with = "crate::serde_utils::deserialize_patterns"
     )]
     pub user_agents: Vec<glob::Pattern>,
+}
+
+impl Grant {
+    pub fn matches_provider_and_user_agent(
+        &self,
+        provider_key: &str,
+        user_agent: Option<&str>,
+    ) -> bool {
+        permissive_match(&self.providers, Some(provider_key))
+            && permissive_match(&self.user_agents, user_agent)
+    }
 }
 
 impl Capabilities {
@@ -40,6 +55,18 @@ impl Capabilities {
             labels: HashMap::new(),
         }
     }
+
+    pub fn collect_model_rules(
+        &self,
+        provider_key: &str,
+        user_agent: Option<&str>,
+    ) -> Vec<ModelRule> {
+        self.grants
+            .iter()
+            .filter(|g| g.matches_provider_and_user_agent(provider_key, user_agent))
+            .flat_map(|g| g.model_rules.clone())
+            .collect()
+    }
 }
 
 impl From<Capabilities> for crate::authorization::Authorization {
@@ -48,10 +75,10 @@ impl From<Capabilities> for crate::authorization::Authorization {
             rules: caps
                 .grants
                 .into_iter()
-                .map(|c| crate::authorization::Rule {
-                    providers: c.providers,
-                    models: c.models,
-                    user_agents: c.user_agents,
+                .map(|g| crate::authorization::Rule {
+                    providers: g.providers,
+                    model_patterns: g.model_rules.into_iter().map(|r| r.pattern).collect(),
+                    user_agents: g.user_agents,
                 })
                 .collect(),
         }
@@ -121,15 +148,34 @@ mod tests {
         glob::Pattern::new(s).unwrap()
     }
 
+    fn model_rule(s: &str, rewrite: Option<&str>) -> ModelRule {
+        ModelRule {
+            pattern: pattern(s),
+            rewrite: rewrite.map(|r| r.to_owned()),
+        }
+    }
+
     #[test]
     fn test_grant_deserialize() {
-        let json = r#"{"providers": ["myprovider", "prefix-*"], "models": ["claude-*"], "user_agents": ["python-*"]}"#;
+        let json = r#"{
+                "providers": ["myprovider", "prefix-*"], 
+                "models": {
+                    "claude-*": {},
+                    "model": {
+                        "rewrite": "other-model"
+                    }
+                }, 
+                "user_agents": ["python-*"]
+            }"#;
         let grant: Grant = serde_json::from_str(json).unwrap();
         assert_eq!(
             grant,
             Grant {
                 providers: vec![pattern("myprovider"), pattern("prefix-*")],
-                models: vec![pattern("claude-*")],
+                model_rules: vec![
+                    model_rule("claude-*", None),
+                    model_rule("model", Some("other-model"))
+                ],
                 user_agents: vec![pattern("python-*")],
             },
         );
@@ -143,7 +189,7 @@ mod tests {
             grant,
             Grant {
                 providers: vec![pattern("myprovider")],
-                models: vec![],
+                model_rules: vec![],
                 user_agents: vec![],
             },
         );
@@ -165,7 +211,7 @@ mod tests {
     fn test_grant_serialize() {
         let grant = Grant {
             providers: vec![pattern("myprovider"), pattern("prefix-*")],
-            models: vec![pattern("claude-*")],
+            model_rules: vec![model_rule("claude-*", Some("target"))],
             user_agents: vec![pattern("python-*")],
         };
         let json = serde_json::to_value(&grant).unwrap();
@@ -173,7 +219,7 @@ mod tests {
             json,
             serde_json::json!({
                 "providers": ["myprovider", "prefix-*"],
-                "models": ["claude-*"],
+                "models": {"claude-*": {"rewrite": "target"}},
                 "user_agents": ["python-*"],
             }),
         );
@@ -183,8 +229,9 @@ mod tests {
     fn parse_valid_capabilities() {
         let json = r#"{
             "flare.io/cap/lacuna/grants": [
-                {"providers": ["firstprovider"], "models": ["claude-*"], "user_agents": ["python-*"]},
-                {"providers": ["secondprofider", "thirdprovider"], "models": ["gpt-*"]}
+                {"providers": ["firstprovider"], "models": {"claude-*": {}}, "user_agents": ["python-*"]},
+                {"providers": ["secondprofider", "thirdprovider"], "models": {"gpt-*": {}}},
+                {"providers": ["fourthprovider"], "models": {"gemini-*": {"rewrite": "opus"}}}
             ],
             "flare.io/cap/lacuna/labels": [
                 {"team": "platform", "env": "production"},
@@ -198,12 +245,17 @@ mod tests {
                 grants: vec![
                     Grant {
                         providers: vec![pattern("firstprovider")],
-                        models: vec![pattern("claude-*")],
+                        model_rules: vec![model_rule("claude-*", None)],
                         user_agents: vec![pattern("python-*")],
                     },
                     Grant {
                         providers: vec![pattern("secondprofider"), pattern("thirdprovider")],
-                        models: vec![pattern("gpt-*")],
+                        model_rules: vec![model_rule("gpt-*", None)],
+                        user_agents: vec![],
+                    },
+                    Grant {
+                        providers: vec![pattern("fourthprovider")],
+                        model_rules: vec![model_rule("gemini-*", Some("opus"))],
                         user_agents: vec![],
                     },
                 ],
@@ -219,9 +271,10 @@ mod tests {
     fn parse_capabilities_invalid_ignored() {
         let json = r#"{
             "flare.io/cap/lacuna/grants": [
-                {"providers": ["firstprovider"], "models": ["claude-*"]},
+                {"providers": ["firstprovider"], "models": {"claude-*": {}}},
                 ["something-bad"],
-                {"providers": ["secondprofider"]}
+                {"providers": ["secondprovider"]},
+                {"providers": ["thirdprovider"], "models": {"gemini-*": {"invalid-key": "something"}}}
             ]
         }"#;
         let capabilities = parse_capabilities(json).unwrap();
@@ -231,12 +284,12 @@ mod tests {
                 grants: vec![
                     Grant {
                         providers: vec![pattern("firstprovider")],
-                        models: vec![pattern("claude-*")],
+                        model_rules: vec![model_rule("claude-*", None)],
                         user_agents: vec![],
                     },
                     Grant {
-                        providers: vec![pattern("secondprofider")],
-                        models: vec![],
+                        providers: vec![pattern("secondprovider")],
+                        model_rules: vec![],
                         user_agents: vec![],
                     },
                 ],
@@ -258,6 +311,60 @@ mod tests {
     }
 
     #[test]
+    fn authorization_from_capabilities_evaluate_non_rewritten_model_name() {
+        let caps = Capabilities {
+            grants: vec![Grant {
+                providers: vec![pattern("myprovider")],
+                model_rules: vec![
+                    model_rule("claude-*", Some("rewriten-model")),
+                    model_rule("gpt-*", None),
+                ],
+                user_agents: vec![pattern("python-*")],
+            }],
+            labels: HashMap::new(),
+        };
+        let auth: crate::authorization::Authorization = caps.into();
+        assert_eq!(auth.rules.len(), 1);
+        let rule = &auth.rules[0];
+        assert_eq!(rule.providers, vec![pattern("myprovider")]);
+        assert_eq!(rule.user_agents, vec![pattern("python-*")]);
+
+        // No 'rewriten-model'
+        assert_eq!(
+            rule.model_patterns,
+            vec![pattern("claude-*"), pattern("gpt-*")]
+        );
+    }
+
+    #[test]
+    fn grants_matches_provider_and_user_agent() {
+        let grant = Grant {
+            providers: vec![pattern("myprovider")],
+            model_rules: vec![model_rule("irrelevant-model", None)],
+            user_agents: vec![pattern("python-*")],
+        };
+        assert!(grant.matches_provider_and_user_agent("myprovider", Some("python-requests")));
+
+        // Provider mismatch.
+        assert!(!grant.matches_provider_and_user_agent("otherprovider", Some("python-requests")));
+
+        // User agent mismatch.
+        assert!(!grant.matches_provider_and_user_agent("myprovider", Some("curl")));
+
+        // Missing user agent does not match a non-empty list.
+        assert!(!grant.matches_provider_and_user_agent("myprovider", None));
+    }
+
+    #[test]
+    fn grants_matches_all_provider_and_user_agent_when_empty_lists() {
+        let grant = Grant::default();
+        assert!(grant.matches_provider_and_user_agent("anyprovider", Some("any-agent")));
+        assert!(grant.matches_provider_and_user_agent("anyprovider", None));
+        assert!(grant.matches_provider_and_user_agent("anotherprovider", None));
+        assert!(grant.matches_provider_and_user_agent("anotherprovider", Some("another-agent")));
+    }
+
+    #[test]
     fn parse_rfc2047_encoded() {
         // Tailscale uses RFC2047 "Q" encoding for values that contain non-ASCII characters.
         // Ref: https://tailscale.com/docs/features/tailscale-serve#app-capabilities-header
@@ -269,7 +376,7 @@ mod tests {
             Capabilities {
                 grants: vec![Grant {
                     providers: vec![pattern("🐿️")],
-                    models: vec![],
+                    model_rules: vec![],
                     user_agents: vec![],
                 },],
                 labels: Default::default()

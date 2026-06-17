@@ -1,9 +1,10 @@
+use crate::matching::permissive_match;
 use crate::request_metadata::RequestMetadata;
 
 #[derive(Debug, Clone)]
 pub struct Rule {
     pub providers: Vec<glob::Pattern>,
-    pub models: Vec<glob::Pattern>,
+    pub model_patterns: Vec<glob::Pattern>,
     pub user_agents: Vec<glob::Pattern>,
 }
 
@@ -21,18 +22,13 @@ impl Authorization {
             .map(|ua| ua.normalized.as_str());
 
         self.rules.iter().any(|rule| {
-            Self::check_values(&rule.providers, Some(provider))
-                && Self::check_values(&rule.models, request_metadata.inspected.model.as_deref())
-                && Self::check_values(&rule.user_agents, user_agent)
+            permissive_match(&rule.providers, Some(provider))
+                && permissive_match(
+                    &rule.model_patterns,
+                    request_metadata.inspected.model.as_deref(),
+                )
+                && permissive_match(&rule.user_agents, user_agent)
         })
-    }
-
-    fn check_values(rule_values: &[glob::Pattern], value: Option<&str>) -> bool {
-        rule_values.is_empty()
-            || match value {
-                None => rule_values.iter().any(|p| p.matches("")),
-                Some(m) => rule_values.iter().any(|p| p.matches(m)),
-            }
     }
 
     pub fn deny_all() -> Self {
@@ -52,7 +48,7 @@ mod tests {
     fn rule(providers: &[&str], models: &[&str]) -> Rule {
         Rule {
             providers: providers.iter().map(|s| pattern(s)).collect(),
-            models: models.iter().map(|s| pattern(s)).collect(),
+            model_patterns: models.iter().map(|s| pattern(s)).collect(),
             user_agents: vec![],
         }
     }
@@ -60,7 +56,7 @@ mod tests {
     fn rule_with_user_agents(providers: &[&str], models: &[&str], user_agents: &[&str]) -> Rule {
         Rule {
             providers: providers.iter().map(|s| pattern(s)).collect(),
-            models: models.iter().map(|s| pattern(s)).collect(),
+            model_patterns: models.iter().map(|s| pattern(s)).collect(),
             user_agents: user_agents.iter().map(|s| pattern(s)).collect(),
         }
     }

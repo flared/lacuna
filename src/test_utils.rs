@@ -44,7 +44,7 @@ pub fn make_provider_with_model_rules(
     key: &str,
     baseurl: &str,
     compat: provider::compatibility::Compatibility,
-    model_rules: Vec<config::ModelRule>,
+    model_rules: Vec<crate::model_rules::ModelRule>,
 ) -> provider::Provider {
     provider::Provider::from_config(
         key,
