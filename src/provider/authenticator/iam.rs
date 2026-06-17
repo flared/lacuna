@@ -18,8 +18,10 @@ fn aws_signing_services(compatibility: &Compatibility) -> Vec<&'static str> {
     if compatibility.bedrock_model_invoke {
         services.push("bedrock");
     }
-    // Future :
-    // if compatibility.anthropic_messages { services.push("aws-external-anthropic"); }
+    // Claude Platform on AWS
+    if compatibility.anthropic_messages {
+        services.push("aws-external-anthropic");
+    }
     services
 }
 /// Refresh when within this buffer of expiry.
@@ -195,6 +197,36 @@ mod tests {
 
     use aws_credential_types::provider::error::CredentialsError;
     use aws_credential_types::provider::future;
+
+    #[test]
+    fn signing_service_resolved_from_compatibility() {
+        // Bedrock and Claude Platform on AWS each map to their own SigV4 service.
+        let bedrock = Compatibility {
+            bedrock_model_invoke: true,
+            ..Default::default()
+        };
+        assert_eq!(aws_signing_services(&bedrock), vec!["bedrock"]);
+
+        let anthropic = Compatibility {
+            anthropic_messages: true,
+            ..Default::default()
+        };
+        assert_eq!(
+            aws_signing_services(&anthropic),
+            vec!["aws-external-anthropic"]
+        );
+
+        // No AWS-backed flag resolves to no service (rejected by `new`).
+        assert!(aws_signing_services(&Compatibility::default()).is_empty());
+
+        // Enabling both is ambiguous and surfaces more than one service.
+        let both = Compatibility {
+            bedrock_model_invoke: true,
+            anthropic_messages: true,
+            ..Default::default()
+        };
+        assert_eq!(aws_signing_services(&both).len(), 2);
+    }
 
     /// Counts every chain walk and returns one response per call
     #[derive(Debug)]

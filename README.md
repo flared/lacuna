@@ -91,6 +91,19 @@ The provided configuration file may include environment variable substitution us
       "compatibility": {
         "bedrock_model_invoke": true
       }
+    },
+    "claude-aws": {
+      "name": "Claude Platform on AWS",
+      "baseurl": "https://aws-external-anthropic.us-east-1.api.aws",
+      "authorization": {
+        "type": "iam"
+      },
+      "compatibility": {
+        "anthropic_messages": true
+      },
+      "headers": {
+        "anthropic-workspace-id": "${ANTHROPIC_WORKSPACE_ID}"
+      }
     }
   }
 }
