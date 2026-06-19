@@ -112,6 +112,22 @@ impl IamRequestSigner {
         self.credentials.get().await.map(|_| ())
     }
 
+    // We sign every request with our own credentials, any client-sent auth must be dropped first.
+    // `authorization`/`x-api-key` could otherwise reach the upstream as a competing credential
+    pub(super) fn strip_auth_headers(&self, headers: &mut http::HeaderMap) {
+        for name in headers.keys().cloned().collect::<Vec<_>>() {
+            let n = name.as_str();
+            if n == "authorization"
+                || n == "x-api-key"
+                || n == "content-length"
+                || n.starts_with("x-amz-")
+            {
+                tracing::debug!(header = %name, "removing client auth header");
+                headers.remove(&name);
+            }
+        }
+    }
+
     /// SigV4-sign the outbound request.
     /// nothing may mutate the request after this step except additions that stay unsigned.
     pub(super) async fn sign(&self, request: &mut reqwest::Request) -> Result<(), anyhow::Error> {
@@ -398,6 +414,29 @@ mod tests {
             .next()
             .unwrap()
             .to_owned()
+    }
+
+    #[tokio::test]
+    async fn auth_headers_are_properly_stripped() {
+        let signer = test_signer(creds_with_expiry(None));
+        let mut headers = http::HeaderMap::new();
+        // Should be stripped
+        headers.insert("authorization", "AWS4-HMAC-SHA256 junk".parse().unwrap());
+        headers.insert("x-amz-date", "20260611T000000Z".parse().unwrap());
+        headers.insert("x-amz-content-sha256", "deadbeef".parse().unwrap());
+        headers.insert("x-amz-security-token", "client-token".parse().unwrap());
+        headers.insert("x-api-key", "placeholder".parse().unwrap());
+        headers.insert("content-length", "42".parse().unwrap());
+        // Should be kept
+        headers.insert("x-amzn-trace-id", "Root=1-abc".parse().unwrap());
+        headers.insert("anthropic-version", "2023-06-01".parse().unwrap());
+
+        signer.strip_auth_headers(&mut headers);
+
+        // Only the two non-auth headers survive; every auth headers are gone.
+        assert_eq!(headers.len(), 2, "only the kept headers should remain");
+        assert_eq!(headers.get("x-amzn-trace-id").unwrap(), "Root=1-abc");
+        assert_eq!(headers.get("anthropic-version").unwrap(), "2023-06-01");
     }
 
     #[tokio::test]

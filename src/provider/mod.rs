@@ -131,6 +131,7 @@ impl Provider {
         let (parts, body) = incoming.into_parts();
 
         let mut headers = strip_hop_headers(parts.headers);
+        self.authenticator.strip_auth_headers(&mut headers);
         for (name, value) in &self.headers {
             headers.insert(
                 reqwest::header::HeaderName::from_str(name)?,
