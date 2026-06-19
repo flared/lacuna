@@ -72,6 +72,13 @@ impl Authenticator {
             Self::Iam(signer) => signer.resolve_credentials().await,
         }
     }
+
+    pub(super) fn strip_auth_headers(&self, headers: &mut http::HeaderMap) {
+        match self {
+            Self::None | Self::Bearer { .. } | Self::ApiKey { .. } => {}
+            Self::Iam(signer) => signer.strip_auth_headers(headers),
+        }
+    }
 }
 
 pub(super) async fn build_authenticator(
